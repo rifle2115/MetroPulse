@@ -1,0 +1,65 @@
+# ---------------------------------------------------------------------------
+# Datasets — far too large for git, and all of them are re-obtainable.
+# See "Data that isn't in this repo" in README.md for where each one comes from.
+# Nothing here is needed to run the demo; the pipeline runs on the small clips
+# in Data/ that ARE committed.
+# ---------------------------------------------------------------------------
+/ShanghaiTech.zip
+/pipeline/data/ShanghaiTech/
+/pipeline/data/shanghaitech_h5_empty/
+
+# Exploratory transit datasets, not used by any code in this repo
+/tube_data_csv/
+/sydney_data/
+/tube_data/
+
+# ---------------------------------------------------------------------------
+# Footage
+# ---------------------------------------------------------------------------
+# 123 MB 4K source clip — over GitHub's 100 MB hard limit. The two smaller
+# clips in Data/ are committed, and Data/Test_data.mp4 is the one everything
+# has been tested against.
+/Data/10287402-hd_2160_3840_30fps.mp4
+
+# ---------------------------------------------------------------------------
+# Model weights
+# ---------------------------------------------------------------------------
+# person_counter.py loads yolo11n.pt and nothing else (see the note in that
+# file about bigger models finding FEWER people on this footage). These two
+# are unused, 58 MB between them, and ultralytics re-downloads on demand.
+/pipeline/mcnn/yolo11m.pt
+/pipeline/mcnn/yolo11s.pt
+
+# Training artefacts. checkpoints/best.pt IS committed — it's the trained MCNN
+# the Control Room loads, and it's only ~500 KB.
+/pipeline/mcnn/checkpoints/last.pt
+/pipeline/mcnn/checkpoints/resume.pt
+
+# ---------------------------------------------------------------------------
+# Runtime output
+# ---------------------------------------------------------------------------
+*.log
+/pipeline/control_room/uploads/
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ---------------------------------------------------------------------------
+# Editors / OS / scratch
+# ---------------------------------------------------------------------------
+*.bak
+*.bak2
+*.pre-*
+.vscode/
+.idea/
+.claude/
+.DS_Store
+Thumbs.db
+desktop.ini

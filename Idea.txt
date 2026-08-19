@@ -1,0 +1,30 @@
+Video file / webcam feed  (stands in for IP Cameras)
+        ↓
+Preprocessing  — runs on your laptop (Python/OpenCV)
+        ↓
+MCNN  — runs on your laptop (PyTorch), trained on ShanghaiTech Part B
+        ↓
+Density Heatmap + Zone Counts
+        ↓
+Zone Density Calculation  — Python, splits frame into zones A/B/C
+        ↓
+Surge Prediction  — simple time-series/heuristic model (e.g. rate of change per zone)
+        ↓
+Decision Engine  — Python logic: zone density → color state (green/amber/red)
+        ↓
+MQTT Broker  — Mosquitto, running locally on your laptop
+        ↓
+   ┌────────────┴────────────┐
+   ↓                         ↓
+Virtual ESP32           Digital Twin Dashboard
+(a script that subscribes    (React/Three.js — 3D station
+ to MQTT, no GPIO, just        model, zones render colored
+ logs/forwards the color)      live from the same MQTT feed)
+
+
+
+MetroPulse: Real-Time Crowd Intelligence for Metro Platforms
+
+Urban metro systems today optimize train scheduling but ignore how passengers distribute themselves across the platform — leading to dangerous overcrowding in some zones while others sit empty. MetroPulse addresses this gap with an end-to-end crowd intelligence pipeline: cameras capture the platform, a Multi-Column Convolutional Neural Network (MCNN) converts each frame into a real-time crowd density heatmap, and that heatmap is divided into platform zones with individual density scores. A surge prediction module tracks how each zone's density is trending, and a decision engine translates that into actionable guidance — passed over MQTT to the actuation layer, which lights platform-floor indicators green, amber, or red per zone to steer passengers toward less congested areas. The entire system state is mirrored in a live 3D Digital Twin dashboard, giving the control room real-time visibility and manual override capability at any point.
+
+Given the impracticality of accessing operational metro CCTV infrastructure or procuring specialized edge hardware within the Phase-I timeline, MetroPulse is implemented and validated as a fully software-simulated system: the MCNN model is trained and benchmarked on the public ShanghaiTech Part B crowd-counting dataset, live inference runs against self-captured proxy footage, the MQTT broker and edge-device logic run locally, and the physical LED actuation layer is rendered as live-updating colored zones within the Digital Twin dashboard itself. Every simulated component communicates using the exact same message contracts (MQTT topics, payload schemas) that the physical hardware would use in production — meaning the architecture is deployment-ready and hardware-agnostic by design, with Phase-II scoped to swap in real cameras, Jetson Nano edge devices, and ESP32-driven LED strips without any change to the core pipeline.

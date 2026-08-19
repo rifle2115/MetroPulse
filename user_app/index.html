@@ -1,0 +1,616 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0d14" />
+<title>MetroPulse — Where to Board</title>
+
+<style>
+  /* ------------------------------------------------------------------ *
+     Passenger app. Phone-first: this is the one part of MetroPulse that
+     is not an operator tool, so it answers exactly one question the
+     moment it opens — WHICH COACH DO I STAND AT — and everything else on
+     the screen is supporting evidence for that answer.
+   * ------------------------------------------------------------------ */
+  :root{
+    --bg:#0a0d14;
+    --card:#121826;
+    --card-hi:#18203247;
+    --line:rgba(126,160,205,.14);
+    --line-hi:rgba(126,160,205,.30);
+    --txt:#e8eef7;
+    --dim:#8fa3bd;
+    --dimmer:#5d7392;
+    --low:#2ee27a;
+    --med:#ffb020;
+    --high:#ff4d5e;
+    --brand:#7b5cd6;
+    --brand2:#2ea3d8;
+    --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+    --mono:"JetBrains Mono","SF Mono",Consolas,monospace;
+    --r:18px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;overscroll-behavior-y:none}
+  body{padding:0 0 34px;max-width:520px;margin:0 auto;min-height:100vh;position:relative}
+
+  /* soft brand wash behind the top of the page */
+  body::before{content:"";position:fixed;top:0;left:0;right:0;height:340px;z-index:-1;
+    background:radial-gradient(120% 80% at 50% 0%, #2a2150 0%, #141a2b 42%, var(--bg) 78%)}
+
+  /* ---------------- header ---------------- */
+  header{padding:18px 20px 6px;display:flex;align-items:center;gap:12px}
+  .mark{width:34px;height:34px;border-radius:11px;flex:none;position:relative;
+    background:linear-gradient(145deg,var(--brand),var(--brand2));
+    box-shadow:0 6px 18px -6px var(--brand)}
+  .mark::after{content:"";position:absolute;inset:11px 9px;border-radius:2px;
+    background:#fff;opacity:.92;
+    clip-path:polygon(0 40%,100% 0,100% 60%,0 100%)}
+  .brand{flex:1;min-width:0}
+  .brand b{display:block;font-size:15px;letter-spacing:.02em;font-weight:650}
+  .brand span{display:block;font-size:9.5px;letter-spacing:.1em;color:var(--dim);
+    text-transform:uppercase;margin-top:3px;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis}
+  .clock{text-align:right;font-family:var(--mono);flex:none}
+  .clock b{display:block;font-size:16px;font-variant-numeric:tabular-nums;font-weight:500}
+  .clock span{display:block;font-size:9.5px;letter-spacing:.1em;color:var(--dim);margin-top:2px}
+
+  /* connection pill */
+  #conn{margin:8px 20px 0;display:flex;align-items:center;gap:7px;font-size:10.5px;
+    letter-spacing:.1em;color:var(--dim);text-transform:uppercase}
+  #conn i{width:6px;height:6px;border-radius:50%;background:var(--dimmer);flex:none}
+  #conn.ok i{background:var(--low);box-shadow:0 0 9px var(--low);animation:pulse 2.4s infinite}
+  #conn.bad i{background:var(--high);box-shadow:0 0 9px var(--high)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+  /* ---------------- station ---------------- */
+  .station{padding:14px 20px 4px}
+  .station .now{font-size:10.5px;letter-spacing:.16em;color:var(--dim);text-transform:uppercase}
+  .station h1{margin:5px 0 0;font-size:30px;line-height:1.1;font-weight:680;letter-spacing:-.02em}
+  .station .next{margin-top:7px;font-size:12.5px;color:var(--dim);display:flex;align-items:center;gap:6px}
+  .station .next b{color:var(--txt);font-weight:550}
+
+  /* line progress */
+  .line{display:flex;align-items:center;gap:0;padding:16px 20px 4px}
+  .line .stop{flex:1;height:3px;border-radius:2px;background:#232c40;position:relative}
+  .line .stop.done{background:linear-gradient(90deg,var(--brand),var(--brand2))}
+  .line .stop.here::after{content:"";position:absolute;right:-4px;top:-3.5px;width:10px;height:10px;
+    border-radius:50%;background:#fff;box-shadow:0 0 0 3px var(--bg),0 0 12px var(--brand2)}
+  .line .stop+.stop{margin-left:4px}
+
+  /* ---------------- hero recommendation ---------------- */
+  #rec{margin:16px 16px 0;padding:20px;border-radius:var(--r);position:relative;overflow:hidden;
+    background:linear-gradient(150deg,#1c2b22,#141d2c 70%);border:1px solid #2c5a41}
+  #rec.wait{background:linear-gradient(150deg,#1d2233,#141a28 70%);border-color:var(--line-hi)}
+  #rec .lbl{font-size:10.5px;letter-spacing:.17em;color:#7fe0a8;text-transform:uppercase;font-weight:600}
+  #rec.wait .lbl{color:var(--dim)}
+  #rec .big{margin-top:9px;font-size:34px;font-weight:730;letter-spacing:-.02em;line-height:1.05}
+  #rec .sub{margin-top:8px;font-size:13px;color:var(--dim);line-height:1.5}
+  #rec .arrow{position:absolute;right:-14px;bottom:-20px;font-size:110px;line-height:1;
+    opacity:.10;font-weight:800}
+
+  /* ---------------- coaches ---------------- */
+  .sect{padding:22px 20px 9px;font-size:10.5px;letter-spacing:.16em;color:var(--dim);
+    text-transform:uppercase;display:flex;justify-content:space-between;align-items:baseline}
+  .sect em{font-style:normal;color:var(--dimmer);letter-spacing:.04em;text-transform:none;font-size:11px}
+
+  #coaches{padding:0 16px;display:flex;flex-direction:column;gap:10px}
+  .coach{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+    padding:14px 16px;position:relative;transition:border-color .25s,transform .25s}
+  .coach.best{border-color:#2f7a51;background:linear-gradient(180deg,#152318,var(--card) 60%)}
+  .coach .top{display:flex;align-items:center;gap:10px}
+  .coach .nm{font-size:15px;font-weight:620;flex:1;display:flex;align-items:center;gap:8px}
+  .coach .nm u{text-decoration:none;font-size:10px;letter-spacing:.1em;color:var(--dimmer);
+    font-weight:500}
+  .coach .pill{font-size:9.5px;letter-spacing:.12em;padding:3px 8px;border-radius:20px;
+    font-weight:650;text-transform:uppercase}
+  .coach .cnt{font-family:var(--mono);font-size:14px;font-variant-numeric:tabular-nums;
+    color:var(--dim);flex:none}
+  .coach .cnt b{color:var(--txt);font-size:17px}
+  .bar{margin-top:11px;height:7px;border-radius:5px;background:#1d2434;overflow:hidden;display:flex}
+  .bar i{display:block;height:100%;transition:width .5s cubic-bezier(.2,.8,.2,1)}
+  .bar i.q{opacity:.42}
+  .coach .foot{margin-top:8px;font-size:11.5px;color:var(--dimmer);display:flex;
+    justify-content:space-between}
+  .badge{position:absolute;top:-8px;right:14px;background:var(--low);color:#06240f;
+    font-size:9px;letter-spacing:.1em;font-weight:750;padding:3px 9px;border-radius:20px;
+    text-transform:uppercase}
+
+  /* ---------------- forecast ---------------- */
+  #fc{margin:0 16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+    padding:16px;display:flex;gap:14px;align-items:flex-start}
+  #fc .ico{width:40px;height:40px;border-radius:12px;flex:none;display:grid;place-items:center;
+    font-size:19px}
+  #fc .body{flex:1;min-width:0}
+  #fc .lvl{font-size:15px;font-weight:650;letter-spacing:-.01em}
+  #fc .why{margin-top:4px;font-size:12.5px;color:var(--dim);line-height:1.5}
+  #fc .tag{display:inline-block;margin-top:9px;font-size:10px;letter-spacing:.1em;
+    text-transform:uppercase;padding:3px 9px;border-radius:20px;font-weight:650;
+    background:#1d2434;color:var(--dim)}
+
+  /* two Twins publishing at once */
+  #warn{margin:12px 16px 0;padding:12px 14px;border-radius:14px;
+    background:#2b1519;border:1px solid #5e2831;font-size:12px;color:#ffb3bc;
+    line-height:1.5}
+  #warn b{color:#fff}
+
+  /* ---------------- train status ---------------- */
+  #train{margin:12px 16px 0;padding:13px 16px;border-radius:14px;background:var(--card-hi);
+    border:1px solid var(--line);font-size:12.5px;color:var(--dim);display:flex;
+    align-items:center;gap:10px}
+  #train i{width:7px;height:7px;border-radius:50%;background:var(--brand2);flex:none;
+    box-shadow:0 0 9px var(--brand2)}
+  #train b{color:var(--txt);font-weight:600}
+
+  footer{padding:22px 20px 8px;font-size:10.5px;color:var(--dimmer);line-height:1.7;text-align:center}
+  footer a{color:var(--dim)}
+
+  /* empty / disconnected state */
+  #empty{padding:60px 30px;text-align:center;color:var(--dim)}
+  #empty .e{font-size:40px;opacity:.4}
+  #empty p{margin:14px 0 0;font-size:13.5px;line-height:1.6}
+  #empty code{font-family:var(--mono);font-size:11.5px;color:var(--txt);background:#1a2131;
+    padding:2px 6px;border-radius:5px}
+  .hide{display:none !important}
+</style>
+
+<header>
+  <div class="mark"></div>
+  <div class="brand"><b>MetroPulse</b><span>Namma Metro · Purple Line</span></div>
+  <div class="clock"><b id="clock">--:--</b><span id="date">--</span></div>
+</header>
+
+<div id="conn"><i></i><span id="connTxt">Connecting…</span></div>
+
+<div id="app" class="hide">
+  <div class="station">
+    <div class="now" id="nowLbl">You are at</div>
+    <h1 id="stnName">—</h1>
+    <div class="next" id="nextWrap">Next stop <b id="stnNext">—</b></div>
+  </div>
+
+  <div class="line" id="line"></div>
+
+  <div id="rec" class="wait">
+    <div class="lbl" id="recLbl">Waiting for the platform</div>
+    <div class="big" id="recBig">—</div>
+    <div class="sub" id="recSub">Live coach loads appear when a service is at the platform.</div>
+    <div class="arrow">›</div>
+  </div>
+
+  <div class="sect">Coach loading <em id="capNote"></em></div>
+  <div id="coaches"></div>
+
+  <div class="sect">Expected crowd</div>
+  <div id="fc">
+    <div class="ico" id="fcIco">•</div>
+    <div class="body">
+      <div class="lvl" id="fcLvl">—</div>
+      <div class="why" id="fcWhy">—</div>
+      <span class="tag" id="fcTag"></span>
+    </div>
+  </div>
+
+  <div id="warn" class="hide"></div>
+  <div id="train"><i></i><span id="trainTxt">—</span></div>
+
+  <footer>
+    Coach loading is measured live on the platform and updates as people board.<br />
+    Crowd forecast uses BMRCL ridership patterns and Bangalore event dates.
+  </footer>
+</div>
+
+<div id="empty">
+  <div class="e">📡</div>
+  <p id="emptyMsg">Connecting to the station feed…</p>
+</div>
+
+<script type="module">
+const mqtt = (await import('https://unpkg.com/mqtt@5.10.3/dist/mqtt.esm.js')).default;
+
+/* ==========================================================================
+   MetroPulse passenger app
+   --------------------------------------------------------------------------
+   Read-only. It subscribes to what the Twin and the Control Room already
+   publish and renders the passenger's half of the product: which coach to
+   stand at, and what kind of crowd to expect. It never publishes, so nothing
+   a passenger does here can perturb the simulation an operator is running.
+   ========================================================================== */
+
+const MQTT_WS_URL = 'ws://localhost:9001';
+const $ = id => document.getElementById(id);
+
+/* Bangalore, so every time shown is IST regardless of the phone's timezone —
+   same reasoning as the Twin and the Control Room, and the same formatter. */
+const IST = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', weekday: 'short', hourCycle: 'h23'
+});
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function istParts(ms) {
+  const out = {};
+  for (const p of IST.formatToParts(new Date(ms))) out[p.type] = p.value;
+  return out;
+}
+
+/* The Twin's simulated clock. The operator can jump it to any date, and the
+   crowd forecast has to follow that rather than real time — otherwise setting
+   the Twin to Diwali shows a Tuesday-afternoon forecast. Tracked as an offset
+   so it keeps ticking between messages instead of freezing on the last one. */
+let simOffsetMs = 0;
+const simNow = () => Date.now() + simOffsetMs;
+
+/* ------------------------- crowd forecast --------------------------------
+   Three inputs, in priority order:
+
+     1. a significant date — a real Bangalore event or holiday, from the
+        vendored list (see build_dates.py). These override everything: the
+        metro is busy on Diwali whatever the hour.
+     2. rush hour — 08:00-11:00 and 16:00-19:00 IST.
+     3. otherwise, whatever the Control Room's BMRCL-backed baseline says on
+        prediction/baseline, if it has published one.
+
+   1 and 2 are computed here rather than asked for, so the forecast still
+   works with only the Twin running — the app is meant to be usable on its
+   own, and a passenger's phone should not depend on the Control Room being
+   open.                                                                    */
+const RUSH = [
+  { from: 8,  to: 11, label: 'Morning rush hour', short: '08:00–11:00' },
+  { from: 16, to: 19, label: 'Evening rush hour', short: '16:00–19:00' }
+];
+
+let significantDates = {};       // "YYYY-MM-DD" -> "Event name"
+/* The Control Room's BMRCL-backed baseline, and — critically — the moment it
+   was computed FOR. The topic is retained, so without checking that the
+   forecast still describes the moment being asked about, the app happily
+   reports whatever was last published: "Republic Day" at two in the afternoon
+   on an ordinary Tuesday, because that is when the operator last moved the
+   clock. See for_iso in prediction/baseline. */
+let baselineFromPipeline = null; // { level, reason, forKey }
+
+function rushWindow(hour) {
+  return RUSH.find(r => hour >= r.from && hour < r.to) || null;
+}
+
+function forecast() {
+  const p = istParts(simNow());
+  const dateKey = `${p.year}-${p.month}-${p.day}`;
+  const hour = +p.hour;
+
+  const event = significantDates[dateKey];
+  if (event) {
+    return { level: 'high', icon: '🎉', headline: 'Expect heavy crowds',
+             why: event, tag: 'Significant date' };
+  }
+
+  const rush = rushWindow(hour);
+  if (rush) {
+    return { level: 'high', icon: '🚦', headline: 'Expect heavy crowds',
+             why: `${rush.label} — services are busiest between ${rush.short}.`,
+             tag: 'Rush hour' };
+  }
+
+  // only when it was computed for this very date and hour — see above
+  if (baselineFromPipeline && baselineFromPipeline.forKey === `${dateKey}T${p.hour}`) {
+    const lv = baselineFromPipeline.level;
+    return {
+      level: lv,
+      icon: lv === 'high' ? '🚦' : lv === 'med' ? '👥' : '🙂',
+      headline: lv === 'high' ? 'Expect heavy crowds'
+              : lv === 'med'  ? 'Moderately busy'
+                              : 'Should be quiet',
+      why: baselineFromPipeline.reason,
+      tag: 'BMRCL ridership data'
+    };
+  }
+
+  return { level: 'low', icon: '🙂', headline: 'Should be quiet',
+           why: 'Outside rush hour, and no major events today.', tag: 'Off-peak' };
+}
+
+const LEVEL_COLOR = { low:'var(--low)', med:'var(--med)', high:'var(--high)' };
+const LEVEL_BG    = { low:'#14291d', med:'#2a2213', high:'#2b1519' };
+
+function renderForecast() {
+  const f = forecast();
+  $('fcIco').textContent = f.icon;
+  $('fcIco').style.background = LEVEL_BG[f.level];
+  $('fcLvl').textContent = f.headline;
+  $('fcLvl').style.color = LEVEL_COLOR[f.level];
+  $('fcWhy').textContent = f.why;
+  $('fcTag').textContent = f.tag;
+}
+
+/* ------------------------------ clock ------------------------------------ */
+function tickClock() {
+  const p = istParts(simNow());
+  $('clock').textContent = `${p.hour}:${p.minute}`;
+  $('date').textContent = `${p.weekday} ${+p.day} ${MONTHS[+p.month - 1]} · IST`;
+  renderForecast();   // the forecast is a function of the clock, so it follows it
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+/* --------------------------- station + coaches ---------------------------- */
+const STATUS_TEXT = { low:'Space', med:'Filling', high:'Full' };
+
+function renderLine(st) {
+  const el = $('line');
+  if (el.childElementCount !== st.count) {
+    el.innerHTML = Array.from({ length: st.count }, () => '<div class="stop"></div>').join('');
+  }
+  [...el.children].forEach((d, i) => {
+    d.className = 'stop' + (i < st.index ? ' done' : '') + (i === st.index ? ' done here' : '');
+  });
+}
+
+function renderCoaches(s) {
+  const cap = s.compartment_capacity;
+  const wrap = $('coaches');
+  if (wrap.childElementCount !== s.coaches.length) {
+    wrap.innerHTML = s.coaches.map((_, i) => `
+      <div class="coach" id="co${i}">
+        <div class="badge hide" id="cbadge${i}">Board here</div>
+        <div class="top">
+          <span class="nm"><span id="cname${i}"></span><u id="czone${i}"></u></span>
+          <span class="pill" id="cpill${i}"></span>
+          <span class="cnt"><b id="cload${i}">0</b>/<span id="ccap${i}"></span></span>
+        </div>
+        <div class="bar"><i id="cbar${i}"></i><i class="q" id="cq${i}"></i></div>
+        <div class="foot"><span id="cfoot${i}"></span><span id="cpct${i}"></span></div>
+      </div>`).join('');
+  }
+
+  s.coaches.forEach((c, i) => {
+    const col = LEVEL_COLOR[c.status] || 'var(--low)';
+    const pctOn = Math.min(100, Math.round(c.onboard / cap * 100));
+    const pctQ  = Math.min(100 - pctOn, Math.round(c.queue / cap * 100));
+
+    $('cname' + i).textContent = c.name.replace(/^COACH/i, 'Coach');
+    $('czone' + i).textContent = 'Zone ' + c.id;
+    $('cload' + i).textContent = c.load;
+    $('ccap' + i).textContent = cap;
+    $('cbar' + i).style.width = pctOn + '%';
+    $('cbar' + i).style.background = col;
+    $('cq' + i).style.width = pctQ + '%';
+    $('cq' + i).style.background = col;
+    $('cfoot' + i).textContent = `${c.onboard} on board · ${c.queue} waiting here`;
+    $('cpct' + i).textContent = Math.round(c.load / cap * 100) + '% full';
+
+    const pill = $('cpill' + i);
+    pill.textContent = STATUS_TEXT[c.status] || '—';
+    pill.style.color = col;
+    pill.style.background = LEVEL_BG[c.status] || '#1d2434';
+
+    $('co' + i).classList.toggle('best', !!c.recommended);
+    $('cbadge' + i).classList.toggle('hide', !c.recommended);
+  });
+}
+
+/* What the station name on screen actually means right now.
+
+   `station` in twin/state is the stop the SERVICE is at, and that index moves
+   the instant the train pulls out — so between one platform and the next the
+   app was announcing "You are at University Road" while the train was still
+   somewhere in the tunnel, several seconds before it arrived. The name was
+   never wrong; the words in front of it were. */
+const NOW_LABEL = {
+  ABSENT:    'Next service at',
+  ARRIVING:  'Service arriving at',
+  DEPARTING: 'Departing',
+  CLOSING:   'Departing'
+};
+
+/* "COACH 1" -> "Coach 1" */
+const coachLabel = name => name.replace(/^COACH\s*/i, 'Coach ');
+
+/* "Coach 1", "Coach 1 or Coach 3", "Coach 1, Coach 2 or Coach 3" */
+function joinCoaches(names) {
+  if (names.length <= 1) return names[0] || '';
+  return names.slice(0, -1).join(', ') + ' or ' + names[names.length - 1];
+}
+
+/* The whole point of the product, in one sentence a passenger can act on. */
+function renderRecommendation(s) {
+  const rec = $('rec');
+  const atPlatform = s.train_state === 'DOCKED' || s.train_state === 'BOARDING';
+  const best = s.coaches[s.best_coach];
+
+  if (!best || s.station.terminus) {
+    rec.classList.add('wait');
+    $('recLbl').textContent = s.station.terminus ? 'End of the line' : 'Waiting for the platform';
+    $('recBig').textContent = s.station.terminus ? 'Last stop' : '—';
+    $('recSub').textContent = s.station.terminus
+      ? 'This service terminates here. Please alight.'
+      : 'Live coach loads appear when a service is at the platform.';
+    return;
+  }
+
+  rec.classList.remove('wait');
+  $('recLbl').textContent = atPlatform ? 'Board here' : 'When the train arrives, board';
+
+  // Every coach tied at the lightest load, not just one of them — see
+  // best_coaches in twin/state. Naming a single coach out of a tie sends the
+  // whole platform to it and creates the imbalance this is meant to prevent.
+  const idx = (s.best_coaches && s.best_coaches.length) ? s.best_coaches : [s.best_coach];
+  const cap = s.compartment_capacity;
+  const allTied = idx.length >= s.coaches.length;
+
+  $('recBig').textContent = allTied
+    ? 'Any coach'
+    : joinCoaches(idx.map(i => coachLabel(s.coaches[i].name)));
+
+  const busiest = Math.max(...s.coaches.map(c => c.load));
+  const saving = busiest - best.load;
+  $('recSub').textContent = allTied
+    ? `Every coach is carrying ${best.load} of ${cap} — the train is evenly loaded, so take whichever is nearest.`
+    : idx.length > 1
+      ? `${best.load} of ${cap} on board in each — ${saving} fewer than the busiest coach. Either is equally good.`
+      : saving > 0
+        ? `${best.load} of ${cap} on board — ${saving} fewer ${saving === 1 ? 'person' : 'people'} than the busiest coach.`
+        : `${best.load} of ${cap} on board — the emptiest coach on this service.`;
+}
+
+const TRAIN_TEXT = {
+  ABSENT:   'No service at the platform',
+  ARRIVING: 'Service arriving now',
+  DOCKED:   'Service at the platform — doors open',
+  BOARDING: 'Boarding in progress',
+  CLOSING:  'Doors closing — stand clear',
+  DEPARTING:'Service departing',
+  OFF:      'No service running'
+};
+
+function renderTrain(s) {
+  const txt = TRAIN_TEXT[s.train_state] || s.train_state;
+  $('trainTxt').innerHTML = `<b>${txt}</b>`;
+}
+
+let lastState = null;
+/* twin/state is one retained topic, so a second Twin tab publishes over the
+   first and the station appears to jump between two different runs. Rather
+   than render the flip-flop as if it were the truth, watch the publisher id:
+   alternating ids inside a few seconds means more than one Twin is open. */
+let seenPublishers = new Map();   // id -> last seen ms
+
+function checkPublishers(s) {
+  const warn = $('warn');
+  if (!s.publisher) { warn.classList.add('hide'); return; }
+
+  const now = Date.now();
+  seenPublishers.set(s.publisher, now);
+  for (const [id, at] of seenPublishers) if (now - at > 15000) seenPublishers.delete(id);
+
+  if (seenPublishers.size > 1) {
+    warn.classList.remove('hide');
+    warn.innerHTML = `<b>${seenPublishers.size} Digital Twins are publishing.</b> `
+      + `This station feed is switching between them, so the station and coach `
+      + `loads below may jump. Close all but one Twin tab.`;
+  } else {
+    warn.classList.add('hide');
+  }
+}
+
+function render(s) {
+  checkPublishers(s);
+  lastState = s;
+  $('app').classList.remove('hide');
+  $('empty').classList.add('hide');
+
+  $('nowLbl').textContent = NOW_LABEL[s.train_state] || 'You are at';
+  $('stnName').textContent = s.station.name;
+  $('nextWrap').classList.toggle('hide', !s.next_station);
+  if (s.next_station) $('stnNext').textContent = s.next_station;
+  $('capNote').textContent = `${s.compartment_capacity} seats per coach`;
+
+  renderLine(s.station);
+  renderCoaches(s);
+  renderRecommendation(s);
+  renderTrain(s);
+}
+
+/* --------------------------------- MQTT ---------------------------------- */
+function setConn(state, text) {
+  const el = $('conn');
+  el.className = state;
+  $('connTxt').textContent = text;
+}
+
+let client = null;
+
+function connect() {
+  setConn('', 'Connecting…');
+  client = mqtt.connect(MQTT_WS_URL, { reconnectPeriod: 3000 });
+
+  client.on('connect', () => {
+    setConn('ok', 'Live station feed');
+    // Wildcards on station_id: this build follows whichever station the Twin
+    // is publishing, which is what makes it work unchanged when the line grows
+    // past one simulated platform.
+    client.subscribe('metropulse/+/twin/state', { qos: 1 });
+    client.subscribe('metropulse/+/prediction/baseline', { qos: 1 });
+    client.subscribe('metropulse/+/control/time', { qos: 1 });
+  });
+
+  client.on('reconnect', () => setConn('', 'Reconnecting…'));
+  client.on('close', () => setConn('bad', 'Feed unavailable'));
+  client.on('error', () => setConn('bad', 'Feed unavailable'));
+
+  client.on('message', (topic, buf) => {
+    let msg;
+    try { msg = JSON.parse(buf.toString()); } catch { return; }
+
+    if (topic.endsWith('/twin/state')) {
+      // the Twin's simulated clock rides along with its state, so the forecast
+      // tracks an operator jumping the date without a separate round trip
+      if (msg.sim_iso) {
+        const t = Date.parse(msg.sim_iso + '+05:30');
+        if (!isNaN(t)) simOffsetMs = t - Date.now();
+      }
+      render(msg);
+      tickClock();
+      return;
+    }
+
+    if (topic.endsWith('/prediction/baseline')) {
+      // v1 carried no for_iso; treat those as unusable rather than as a
+      // forecast for right now, which is the bug this key exists to stop
+      const forKey = msg.for_iso
+        ? `${String(msg.for_iso).slice(0, 10)}T${String(msg.for_iso).slice(11, 13)}`
+        : null;
+      baselineFromPipeline = forKey
+        ? { level: msg.expected_level, reason: msg.reason || '', forKey }
+        : null;
+      renderForecast();
+      return;
+    }
+
+    if (topic.endsWith('/control/time')) {
+      const t = Date.parse(String(msg.target_iso) + '+05:30');
+      if (!isNaN(t)) { simOffsetMs = t - Date.now(); tickClock(); }
+      return;
+    }
+  });
+}
+
+/* Nothing renders until the Twin says something, so say what is missing
+   rather than showing an empty station that looks like a bug. */
+setTimeout(() => {
+  if (!lastState) {
+    $('emptyMsg').innerHTML = client && client.connected
+      ? 'Connected, but no service data yet.<br />Start a run in the Digital Twin.'
+      : 'Cannot reach the station feed.<br />Check the MQTT broker is running on <code>localhost:9001</code>.';
+  }
+}, 6000);
+
+// the date list ships with the app — see build_dates.py
+try {
+  const res = await fetch('data/significant_dates.json');
+  significantDates = (await res.json()).events || {};
+} catch (e) {
+  console.warn('[metropulse] significant dates unavailable', e);
+}
+renderForecast();
+connect();
+
+/* Small handle for checking the forecast without waiting for a date to come
+   round — `MPApp.previewAt('2026-11-08T14:00')` shows Diwali afternoon. It
+   only moves this app's copy of the clock, so it drifts back the moment the
+   Twin publishes again; the Twin remains the one source of simulated time. */
+window.MPApp = {
+  forecast, renderForecast,
+  // lets a synthetic state be pushed through the real renderer, so the tie,
+  // terminus and in-transit wordings can be checked without driving the Twin
+  // into each of those shapes by hand
+  render,
+  get state() { return lastState; },
+  get dates() { return significantDates; },
+  previewAt(iso) {
+    const t = Date.parse(iso.length <= 16 ? iso + ':00+05:30' : iso + '+05:30');
+    if (isNaN(t)) return 'bad date — use YYYY-MM-DDTHH:MM';
+    simOffsetMs = t - Date.now();
+    tickClock();
+    return forecast();
+  }
+};
+</script>

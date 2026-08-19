@@ -1,0 +1,3782 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MetroPulse Compartment Twin</title>
+
+<style>
+  :root{
+    --bg:#070a0e;
+    --panel:rgba(11,16,22,.88);
+    --panel-solid:#0b1016;
+    --line:rgba(120,175,205,.18);
+    --line-hot:rgba(120,175,205,.32);
+    --txt:#c9d8e4;
+    --dim:#6a8195;
+    --dimmer:#47586a;
+    --low:#2ee27a;
+    --med:#ffb020;
+    --high:#ff3b4a;
+    --accent:#5fb8ff;
+    --mono:"JetBrains Mono","SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--txt);
+    font-family:var(--mono);font-size:12px;overflow:hidden;-webkit-font-smoothing:antialiased}
+  canvas{display:block}
+  #stage{position:fixed;inset:0}
+
+  /* ---------- CCTV framing ---------- */
+  #fx{position:fixed;inset:0;pointer-events:none;z-index:5}
+  #fx .vig{position:absolute;inset:0;
+    background:radial-gradient(ellipse at 50% 45%,rgba(0,0,0,0) 45%,rgba(0,0,0,.55) 100%)}
+  #fx .scan{position:absolute;inset:0;opacity:.22;
+    background:repeating-linear-gradient(to bottom,rgba(255,255,255,.045) 0 1px,rgba(0,0,0,0) 1px 3px)}
+  #fx .frame{position:absolute;inset:6px;border:1px solid rgba(150,200,230,.10)}
+
+  .hud{position:fixed;z-index:8;pointer-events:none;text-shadow:0 1px 3px #000,0 0 12px rgba(0,0,0,.9)}
+  #camid{top:12px;left:16px;font-size:15px;letter-spacing:.10em;line-height:1.45;color:#e8f2f8}
+  #camid .ts{font-size:13px;color:#b7cbd8;letter-spacing:.08em}
+  #live{top:12px;right:18px;font-size:15px;letter-spacing:.16em;display:flex;align-items:center;gap:9px;color:#fff}
+  #live .dot{width:11px;height:11px;border-radius:50%;background:#ff2b39;box-shadow:0 0 10px #ff2b39;animation:blink 1.6s infinite}
+  @keyframes blink{0%,55%{opacity:1}70%,100%{opacity:.18}}
+  #fps{bottom:42px;left:16px;background:rgba(6,9,13,.72);border:1px solid var(--line);
+    padding:7px 12px;line-height:1.6;font-size:12.5px;letter-spacing:.06em;color:#cfe0ec}
+  #fps b{color:#fff;font-weight:500}
+
+  /* ---------- top status strip ---------- */
+  #topbar{position:fixed;z-index:8;top:10px;left:50%;transform:translateX(-50%);
+    display:flex;align-items:stretch;gap:1px;background:var(--line);
+    border:1px solid var(--line-hot);box-shadow:0 6px 26px rgba(0,0,0,.6)}
+  #topbar .cell{background:var(--panel-solid);padding:6px 15px;text-align:center;min-width:96px}
+  #topbar .k{font-size:9px;letter-spacing:.16em;color:var(--dim)}
+  #topbar .v{font-size:19px;line-height:1.15;color:#eaf4fb;font-variant-numeric:tabular-nums}
+  #topbar .cell.title{min-width:0;text-align:left;padding:6px 16px 6px 14px;
+    display:flex;flex-direction:column;justify-content:center}
+  #topbar .title .n{font-size:13px;letter-spacing:.13em;color:#eaf4fb}
+  #topbar .title .s{font-size:8.5px;letter-spacing:.16em;color:var(--dimmer)}
+  #topbar .v.hot{color:var(--high)}
+  #topbar .v.sm{font-size:11px;padding-top:6px;letter-spacing:.08em}
+  #topbar .v.run{color:var(--low)}
+  #topbar .v.done{color:var(--accent)}
+
+  /* ---------- control panel ---------- */
+  #panel{position:fixed;z-index:9;left:16px;top:62px;bottom:106px;width:322px;
+    background:var(--panel);backdrop-filter:blur(7px);border:1px solid var(--line-hot);
+    display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.55)}
+  #panel .head{padding:8px 12px;border-bottom:1px solid var(--line);
+    display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.025)}
+  #panel .head b{font-weight:500;letter-spacing:.15em;font-size:10.5px;color:#dcecf6}
+  #panel .head span{font-size:9px;letter-spacing:.12em;color:var(--dimmer)}
+  #panel .body{overflow-y:auto;padding:11px 12px 13px;flex:1;min-height:0}
+  #panel .body::-webkit-scrollbar{width:7px}
+  #panel .body::-webkit-scrollbar-thumb{background:#22323f}
+  #panel .body::-webkit-scrollbar-track{background:transparent}
+
+  .sect{font-size:9px;letter-spacing:.18em;color:var(--dimmer);margin:2px 0 8px}
+  .sect.mt{margin-top:13px}
+
+  .zrow{margin-bottom:8px}
+  .zrow .lab{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  .zrow .nm{font-size:11px;letter-spacing:.09em}
+  .zrow .nm i{font-style:normal;display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:7px;
+    transform:translateY(1px)}
+  .zrow .rd{font-size:11px;font-variant-numeric:tabular-nums;color:#dbe9f2}
+  .zrow .rd em{font-style:normal;font-size:9.5px;letter-spacing:.1em;margin-left:7px}
+  .zrow .rd u{text-decoration:none;color:var(--dimmer);font-size:10px;margin-left:6px}
+  .zrow .meta{display:flex;justify-content:space-between;align-items:baseline;margin-top:3px}
+  .zrow .conf{font-size:9px;letter-spacing:.08em;color:var(--dim)}
+  .zrow .spark{font-size:12px;letter-spacing:1px;color:var(--accent);line-height:1}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:16px;background:transparent;cursor:pointer;display:block}
+  input[type=range]::-webkit-slider-runnable-track{height:4px;background:#1b2833;border:1px solid #253643}
+  input[type=range]::-moz-range-track{height:4px;background:#1b2833;border:1px solid #253643}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:16px;margin-top:-7px;
+    background:#c9dbe8;border:1px solid #05090d}
+  input[type=range]::-moz-range-thumb{width:11px;height:16px;border-radius:0;background:#c9dbe8;border:1px solid #05090d}
+
+  .fld{display:flex;gap:7px;align-items:stretch;margin-bottom:8px}
+  input[type=number]{width:74px;background:#0d141b;border:1px solid #24343f;color:#eaf4fb;
+    font-family:var(--mono);font-size:14px;padding:6px 8px;text-align:center;-moz-appearance:textfield}
+  input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  input[type=number]:focus{outline:none;border-color:var(--accent)}
+
+  button{flex:1;background:#12202b;border:1px solid #26414f;color:#cfe4f2;font-family:var(--mono);
+    font-size:10.5px;letter-spacing:.11em;padding:8px 6px;cursor:pointer;transition:.13s}
+  button:hover{background:#1b3243;border-color:#3d6d87;color:#fff}
+  button:active{transform:translateY(1px)}
+  button.pri{background:#123a2a;border-color:#1f6e4c;color:#8df0bd}
+  button.pri:hover{background:#17513a;border-color:#2ee27a;color:#c6ffe2}
+  button.warn{background:#3a2412;border-color:#7a4a1c;color:#ffcf8d}
+  button.warn:hover{background:#4d2f16;border-color:#ffb020;color:#ffe3b8}
+  button.danger{background:#3a1418;border-color:#7a2028;color:#ffb0b6}
+  button.danger:hover{background:#4d1a20;border-color:#ff3b4a;color:#ffd6da}
+  button.big{padding:11px 6px;font-size:11px;letter-spacing:.13em}
+  button:disabled{opacity:.34;cursor:not-allowed}
+  button:disabled:hover{background:#12202b;border-color:#26414f;color:#cfe4f2}
+  .btns{display:flex;gap:7px;margin-bottom:7px}
+
+  .fldnote{flex:1;font-size:8.5px;letter-spacing:.11em;color:var(--dim);
+    display:flex;flex-direction:column;justify-content:center;line-height:1.5}
+  .fldnote span{color:var(--dimmer)}
+  .hint{font-size:9px;color:#4b6070;letter-spacing:.06em;line-height:1.5;margin:-2px 0 12px}
+
+  /* station progress strip */
+  #stnStrip{display:flex;align-items:center;gap:0;margin:11px 0 2px}
+  #stnStrip .s{flex:none;width:16px;height:16px;border:1px solid #2c4150;background:#0e161d;
+    display:flex;align-items:center;justify-content:center;font-size:8.5px;color:var(--dim);
+    border-radius:50%;transition:.2s}
+  #stnStrip .s.past{background:#1d3a2c;border-color:#2f6b4d;color:#7fd8a8}
+  #stnStrip .s.now{background:var(--high);border-color:#ff8a92;color:#2a0508;
+    box-shadow:0 0 10px var(--high);transform:scale(1.22)}
+  #stnStrip .l{flex:1;height:1px;background:#25323d}
+  #stnStrip .l.past{background:#2f6b4d}
+
+  /* station-cut blackout — a quick fade to black between one stop and the next */
+  #cut{position:fixed;inset:0;z-index:42;background:#000;opacity:0;pointer-events:none;
+    transition:opacity .22s ease-out}
+  #cut.on{opacity:1;transition:opacity .1s ease-in}
+
+  /* run banner */
+  #banner{position:fixed;z-index:10;top:50%;left:50%;transform:translate(-50%,-50%) scale(.96);
+    background:rgba(8,12,17,.9);border:1px solid var(--line-hot);padding:18px 34px;
+    text-align:center;pointer-events:none;opacity:0;transition:opacity .35s,transform .35s;
+    box-shadow:0 20px 70px rgba(0,0,0,.7)}
+  #banner.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  #banner b{display:block;font-weight:500;font-size:19px;letter-spacing:.22em;color:#eaf4fb}
+  #banner span{display:block;margin-top:7px;font-size:10px;letter-spacing:.14em;color:var(--dim);
+    line-height:1.8;white-space:pre}
+
+  #log{background:#070c11;border:1px solid #1a2731;height:158px;overflow-y:auto;padding:6px 7px;
+    font-size:10px;line-height:1.62}
+  #log::-webkit-scrollbar{width:6px}
+  #log::-webkit-scrollbar-thumb{background:#22323f}
+  #log .e{display:flex;gap:7px;white-space:nowrap}
+  #log .t{color:#3e5464;flex:none}
+  #log .m{color:#93aec1;overflow:hidden;text-overflow:ellipsis}
+  #log .e.in .m{color:#7fe0b0}
+  #log .e.bd .m{color:#ffc45e}
+  #log .e.al .m{color:#b9d4e8}
+  #log .e.dp .m{color:#79c4ff}
+  #log .e.sy .m{color:#8a9fb0}
+  #comp .foot b{color:#cfe0ec;font-weight:500}
+
+  /* ---------- compartment readout ----------
+     One panel, not two. This is the product: for each of the three
+     compartments, who is already aboard, who is queued at its door on this
+     platform, and what that adds up to when the doors close. Live MQTT and
+     the local simulation both write the same fields, so there is nothing to
+     reconcile between a "real" and a "simulated" readout. */
+  #comp{position:fixed;z-index:8;right:16px;bottom:42px;width:250px;
+    background:var(--panel);backdrop-filter:blur(7px);border:1px solid var(--line-hot);
+    box-shadow:0 10px 40px rgba(0,0,0,.55)}
+  #comp .head{padding:7px 11px;border-bottom:1px solid var(--line);
+    display:flex;justify-content:space-between;background:rgba(255,255,255,.025)}
+  #comp .head b{font-weight:500;letter-spacing:.14em;font-size:10px;color:#dcecf6}
+  #comp .head span{font-size:9px;letter-spacing:.1em;color:var(--dimmer)}
+  #comp .body{padding:9px 11px 11px}
+  .crow{margin-bottom:10px}
+  .crow:last-child{margin-bottom:0}
+  .crow .l{display:flex;justify-content:space-between;align-items:baseline;font-size:10.5px;margin-bottom:4px}
+  .crow .l .id{letter-spacing:.1em;color:#a9c1d1}
+  .crow .l .id u{text-decoration:none;color:var(--dimmer);font-size:9px;margin-left:5px}
+  .crow .l .p{font-variant-numeric:tabular-nums;font-size:13px}
+  .crow .bar{height:7px;background:#101a22;border:1px solid #22323e;position:relative;overflow:hidden}
+  /* two stacked fills: solid = already aboard, hatched = queued to board here */
+  .crow .bar i{position:absolute;top:0;bottom:0;left:0;width:0%;transition:width .25s linear;display:block}
+  .crow .bar i.q{opacity:.5;background-image:repeating-linear-gradient(
+    45deg,rgba(255,255,255,.55) 0 2px,rgba(255,255,255,0) 2px 5px)}
+  .crow .sub{display:flex;justify-content:space-between;margin-top:3px;
+    font-size:8.5px;letter-spacing:.09em;color:var(--dimmer);font-variant-numeric:tabular-nums}
+  .crow .sub b{font-weight:500;color:#8fa8ba}
+  .crow.best .l .id{color:var(--low)}
+  #comp .foot{border-top:1px solid var(--line);padding:6px 11px;font-size:9px;letter-spacing:.09em;
+    color:var(--dimmer);display:flex;justify-content:space-between}
+  #comp .rec{border-top:1px solid var(--line);padding:7px 11px;font-size:9.5px;
+    letter-spacing:.06em;color:var(--low);text-align:center}
+
+  /* ---------- footer ---------- */
+  /* full-width footer band, so it can never collide with the corner HUDs */
+  #note{position:fixed;z-index:8;bottom:0;left:0;right:0;
+    font-size:9.5px;letter-spacing:.13em;line-height:1.6;color:#5a7183;text-align:center;
+    pointer-events:none;background:rgba(6,9,13,.7);padding:6px 12px;
+    border-top:1px solid rgba(120,175,205,.12)}
+  #note b{color:#7e99ab;font-weight:500}
+
+  #boot{position:fixed;inset:0;z-index:50;background:#070a0e;display:flex;align-items:center;
+    justify-content:center;flex-direction:column;gap:12px;letter-spacing:.2em;font-size:11px;color:#4d6a7e}
+  #boot .b{width:190px;height:2px;background:#152029;overflow:hidden}
+  #boot .b i{display:block;height:100%;width:38%;background:#2ee27a;animation:sweep 1.1s infinite}
+  @keyframes sweep{0%{transform:translateX(-100%)}100%{transform:translateX(360%)}}
+  #boot.err{color:#ff8a92}
+
+  @media (max-width:1180px){
+    #panel{width:280px}
+    #comp{width:218px}
+  }
+  @media (max-width:860px){
+    #panel{width:250px;top:56px}
+    #comp{width:196px}
+    #topbar .cell{min-width:72px;padding:5px 10px}
+    #topbar .v{font-size:16px}
+    #camid{font-size:12px}
+    #live{font-size:12px}
+  }
+</style>
+
+<div id="stage"></div>
+
+<div id="fx"><div class="scan"></div><div class="vig"></div><div class="frame"></div></div>
+
+<div class="hud" id="camid">CAM_12_STATION_1<div class="ts" id="stamp">-------_-- --:--:--</div></div>
+<div class="hud" id="live"><span>LIVE</span><span class="dot"></span></div>
+<div class="hud" id="fps">FPS&nbsp;: <b id="fpsv">--</b><br />RES&nbsp;: <b id="resv">----x----</b></div>
+
+<div id="topbar">
+  <div class="cell title"><span class="n">METROPULSE</span><span class="s">COMPARTMENT CROWD TWIN</span></div>
+  <div class="cell"><div class="k">STATION</div><div class="v" id="mStation">–/5</div></div>
+  <div class="cell"><div class="k">WAITING</div><div class="v" id="mTotal">0</div></div>
+  <div class="cell"><div class="k">ONBOARD</div><div class="v" id="mOnboard">0</div></div>
+  <div class="cell"><div class="k">FULL COACHES</div><div class="v" id="mHigh">0</div></div>
+  <div class="cell"><div class="k">GATE IN / OUT</div><div class="v sm" id="mGate">-- / --</div></div>
+  <div class="cell"><div class="k">STATUS</div><div class="v sm" id="mTrain">IDLE</div></div>
+  <div class="cell"><div class="k">DATE</div><div class="v" id="mDate">-- ---</div></div>
+  <div class="cell"><div class="k">CLOCK · IST</div><div class="v" id="mClock">--:--:--</div></div>
+</div>
+
+<div id="panel">
+  <div class="head"><b>OPERATIONS CONSOLE</b><span id="panelStation">STN 1/5</span></div>
+  <div class="body">
+    <div class="sect">RUN CONTROL</div>
+    <div class="btns">
+      <button class="pri big" id="btnStart">▶ START RUN</button>
+      <button class="danger big" id="btnResetRun">■ RESET</button>
+    </div>
+    <div id="stnStrip"></div>
+
+    <div class="sect mt">MQTT LIVE FEED</div>
+    <div class="btns">
+      <button id="btnMqtt">▶ GO LIVE</button>
+      <span class="fldnote" id="mqttStatus" style="flex:0 0 auto;padding:0 6px;">OFFLINE</span>
+    </div>
+    <div class="hint">SUBSCRIBES OVER WS://LOCALHOST:9001 — THE CONTROL ROOM THEN<br />
+      DRIVES THE RUN: THE TRAIN HOLDS AT EACH STOP UNTIL ITS CLIP ENDS</div>
+
+    <div class="sect mt">PLATFORM QUEUE PER COACH — MANUAL SET</div>
+    <div id="zctl"></div>
+
+    <div class="sect mt">SEND PASSENGERS — THIS STATION</div>
+    <div class="fld">
+      <input type="number" id="inCount" value="20" min="1" max="150" />
+      <button class="pri" id="btnSend">SEND BATCH</button>
+    </div>
+    <div class="hint">A BATCH OF YOUR CHOICE, ANY TIME WHILE STOPPED —<br />
+      DISTRIBUTED BY PLATFORM LED × INBOUND COMPARTMENT ROOM</div>
+
+    <div class="sect">SERVICE &amp; SCENARIO</div>
+    <div class="btns"><button class="warn" id="btnTrain">▶ DEPART NOW</button></div>
+    <div class="btns">
+      <button id="btnRush">SIMULATE RUSH</button>
+      <button id="btnClear">CLEAR PLATFORM</button>
+    </div>
+
+    <div class="sect mt">SIMULATED TIME (IST)</div>
+    <div class="fld">
+      <input type="date" id="simDate" style="flex:1.5;width:auto;text-align:left" />
+      <input type="number" id="simHour" min="0" max="23" style="width:62px" />
+    </div>
+    <div class="btns">
+      <button id="btnSetTime">SET CLOCK</button>
+      <button id="btnNowTime">↻ NOW</button>
+    </div>
+    <div class="hint" id="timeHint">CLOCK RUNS ON REAL IST</div>
+
+    <div class="sect mt">ACTIVITY LOG</div>
+    <div id="log"></div>
+  </div>
+</div>
+
+<div id="comp">
+  <div class="head"><b>COMPARTMENT LOAD</b><span id="compState">IDLE</span></div>
+  <div class="body" id="compBody"></div>
+  <div class="rec" id="compRec">WAITING FOR DATA</div>
+  <div class="foot">
+    <span>CAP / COACH <b id="compCap">30</b></span>
+    <span>ONBOARD <b id="compTotal">0/90</b></span>
+  </div>
+</div>
+
+<div id="banner"><b id="bannerT"></b><span id="bannerS"></span></div>
+<div id="cut"></div>
+
+<div id="note">
+  <b>CONCEPT SIMULATION</b> — SYNTHETIC DATA ONLY. NO CAMERA FEED, NO ML MODEL, NO LIVE NETWORK. PRESS GO LIVE TO DRIVE THIS FROM THE REAL PIPELINE.
+</div>
+
+<div id="boot"><div>INITIALISING FEED</div><div class="b"><i></i></div></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+// SkeletonUtils.js exports `clone` as a bare named function, not an object
+// with a `.clone` method — importing it as a static `{ SkeletonUtils }`
+// binding names an export that doesn't exist, which is a hard module-link
+// failure and silently kills the whole script (no user code runs at all,
+// not just this one). Dynamic import + a correct destructure avoids it.
+const { clone: cloneSkinned } = await import('three/addons/utils/SkeletonUtils.js');
+const { mergeGeometries } = await import('three/addons/utils/BufferGeometryUtils.js');
+const mqtt = (await import('https://unpkg.com/mqtt@5.10.3/dist/mqtt.esm.js')).default;
+
+/* ==========================================================================
+   METROPULSE PLATFORM SIMULATOR
+   Concept simulation: arrival -> LED-guided distribution -> boarding -> departure
+   ========================================================================== */
+
+/* ------------------------------- CONFIG --------------------------------- */
+const CFG = {
+  zoneCapacity : 40,          // nominal capacity used by the weighting function
+  thrLow       : 12,          // <= 12  -> LOW    (green)
+  thrMed       : 26,          // 13..26 -> MEDIUM (amber)
+                              // >= 27  -> HIGH   (red, pulsing)
+  renderCap    : 9,           // max rendered figures per zone. Each figure is
+                              // a rigged GLTF clone with its own animation
+                              // mixer and skinning work every frame, so this
+                              // is the single biggest lever on frame rate —
+                              // 14 put 42 on the platform plus 24 in the
+                              // coaches, and the scene held 649 textures.
+                              // The true count is unaffected; this only caps
+                              // how many bodies are drawn for it.
+  spawnStagger : 0.045,       // seconds between individual arrivals — with the
+                              // faster walk speeds a wider gap than this is
+                              // what makes a batch take seconds to appear
+  // No normal dwell time: a docked train waits for a batch (offline) or a
+  // clip (live), not for a clock. See the DOCKED case in updateTrain().
+  dwellMax     : 40,          // absolute cap from the moment of docking —
+                              // boards regardless of stragglers past this
+  // The doors close when the last person queued at them is inside, not on a
+  // timer — see the BOARDING case in updateTrain(). This is only the safety
+  // net against a figure that somehow never arrives, so it is deliberately far
+  // longer than any real boarding walk: the longest one possible here is a
+  // late arrival crossing the concourse to the far coach, about 9s at the
+  // current walk speeds.
+  boardingMax  : 45,
+  gapAfterDep  : 2.2,         // seconds with no train at the platform
+  alightMin    : 0.18,        // fraction of a coach that gets off at a stop
+  alightMax    : 0.45,
+  compCapacity : 30,          // HARD per-coach limit — no one boards past it
+  compRenderCap: 5,           // max figures drawn inside one coach — these
+                              // are now real skinned-mesh clones too, so
+                              // this is deliberately a small representative
+                              // sample rather than the true onboard count
+  histLen      : 20,          // rolling readings kept per zone — long enough
+                              // for a readable sparkline in the console
+  histEvery    : 1.5,         // seconds between history samples
+  rebalance    : 1.2,         // seconds between LED-guided queue rebalances
+
+  // The signal the whole product is about. What a passenger standing on the
+  // platform actually needs is not "how dense is this third of the platform"
+  // but "how full will that compartment be once these doors close" — i.e.
+  // whoever is already aboard plus whoever is queued at that door. These
+  // fractions of compCapacity bucket that projected load into the same
+  // low/med/high vocabulary everything else already speaks.
+  compMedFrac  : 0.55,        // >= 55% of a coach -> amber, "filling"
+  compHighFrac : 0.90         // >= 90% of a coach -> red,   "full"
+};
+
+/* The line. The run is one trip from the first stop to the terminus. */
+const STATIONS = [
+  { id:1, name:'Central City'      },
+  { id:2, name:'University Road'   },
+  { id:3, name:'Lakeside'          },
+  { id:4, name:'North Gate'        },
+  { id:5, name:'Airport Terminal'  }
+];
+
+const COL = {
+  low : new THREE.Color('#2ee27a'),
+  med : new THREE.Color('#ffb020'),
+  high: new THREE.Color('#ff3b4a')
+};
+const HEX = { low:'#2ee27a', med:'#ffb020', high:'#ff3b4a' };
+// LED copy is an instruction, not a measurement — the strip exists to move
+// somebody's feet, so it says what to do about the compartment behind it
+// rather than reporting a density the passenger can already see.
+const STATUS_TEXT  = { low:'BOARD HERE', med:'FILLING UP', high:'FULL — MOVE ALONG' };
+const STATUS_SHORT = { low:'SPACE', med:'FILLING', high:'FULL' };
+
+/* World layout ------------------------------------------------------------
+   +X runs down the platform (away from the camera), +Z is the track side.  */
+const L = {
+  platX0:-32, platX1:32,
+  platZ0:-16.5, platZ1:8.4,       // back wall -> platform edge
+  platH : 1.1,                    // platform height above the track bed
+  restZ0:-9.6, restZ1:5.0,        // where waiting passengers stand
+  ledZ0 : 5.6, ledZ1: 7.3,        // LED guidance strip
+  safeZ : 7.9,                    // yellow safety line
+  trainZ0: 9.2, trainZ1:16.4,
+  trainH : 4.25,
+  ceilY  : 13.0,
+  entrance: { x:-30.5, z:-11.0 }, // passengers walk in from here…
+  exit    : { x:-29.0, z:-13.8 }  // …and alighting passengers leave this way
+};
+
+/* A "zone" is one stretch of platform AND the compartment whose doors open
+   onto it — they are the same thing from a passenger's point of view, and
+   the MCNN's left/middle/right thirds map onto them one-to-one. `id` stays
+   A/B/C because that's the zone_id on the wire (see mqtt_contract.md);
+   `name` is what a passenger reads, which is the coach. */
+const ZONES = [
+  { id:'A', name:'COACH 1', x0:-27, x1:-9 },
+  { id:'B', name:'COACH 2', x0: -9, x1: 9 },
+  { id:'C', name:'COACH 3', x0:  9, x1:27 }
+];
+
+/* ------------------------------- STATE ---------------------------------- */
+const zones = ZONES.map((z, i) => ({
+  ...z, idx:i,
+  cx:(z.x0 + z.x1) / 2,
+  count:0,                 // people queued at THIS coach's doors (may exceed what we render)
+  load:0,                  // projected compartment load = onboard + count
+  status:'low',            // LED state, from `load` — see loadStatus()
+  liveStatus:null,         // the decision engine's own verdict while live, if any
+  platStatus:'low',        // platform-density state, from `count` — console readout only
+  hist:[],
+  trend:'steady',
+  confidence:97,           // stability-based "AI confidence" reading
+  agents:[],               // rendered figures belonging to this zone
+  slots:[], freeSlots:[],
+  led:null, sprite:null, spriteCtx:null, spriteTex:null, lastLedKey:'', lastSpriteKey:''
+}));
+
+const comps = [0,1,2].map(i => ({
+  idx:i, cx:zones[i].cx,
+  boarded:0,               // TRUE boarded count (credited as figures step aboard)
+  boardedF:0,              // same, un-rounded
+  pending:0,               // still owed to this coach for the current round
+  perFigure:1,             // true passengers represented by one rendered figure
+  rendered:0,              // figures drawn inside (derived from `boarded`)
+  incoming:0,              // load this coach is carrying INTO the next stop —
+                           // frozen at departure, read by pickZone() for the
+                           // whole following dwell regardless of alighting
+  boardedHere:0,           // boarded at THIS stop, from the gate topic — the
+                           // measured platform delta, not a running total
+  onboardChars:[],         // small pool of GLB clones filling the coach —
+                           // grown/shrunk to track `rendered` each frame
+  doorOpen:0, doorTarget:0,
+  doorsL:[], doorsR:[], bar:null, barMat:null
+}));
+
+let agents = [];           // all rendered figures (waiting + alighting)
+const pendingSpawns = [];  // staggered arrival queue
+let simTime = 0, histTimer = 0, reconcileTimer = 0, rebalTimer = 0, rebalLogAt = -99;
+
+// "Before Guidance" is a shadow tally: every arrival also gets a uniform
+// random pick logged here alongside the real LED-weighted pickZone() result,
+// so it's a genuine unguided baseline computed from the same arrivals — not
+// a fabricated number. "After Guidance" is the actual per-coach boarding
+// count once the LED-guided platform crowd steps onto the train. Both reset
+// per station in applyStation().
+let stationBefore = [0, 0, 0];
+let stationAfter  = [0, 0, 0];
+
+const train = {
+  group:null,
+  x:0,                     // offset along the track (0 = docked)
+  // OFF | ARRIVING | DOCKED | BOARDING | CLOSING | DEPARTING | ABSENT
+  state:'OFF',
+  timer:0, t:0, from:0, to:0, dur:1,
+  boardingWatchdog:0, alightWatchdog:0, alighting:false,
+  boardingHeldLogged:false,   // one-shot, so the "doors held" notice logs once
+  dockedElapsed:0,         // true time since docking — NOT reset by sends,
+                          // the hard safety net against dwellMax
+  renderFade:1             // train + onboard-figure visibility, 0..1
+};
+const OFFSCREEN = 150;     // how far down the track the train slides
+
+/* ---------------------------- THE RUN ------------------------------------ */
+const run = {
+  state:'IDLE',            // IDLE | RUNNING | COMPLETE
+  station:0,               // 0-based index into STATIONS
+  t:0,                     // elapsed run seconds
+  stats:{ spawned:0, boarded:0, alighted:0, left:0 }
+};
+
+/* --------------------------- PIPELINE MODE -------------------------------
+   The Twin used to run its own clock: dock, wait out a fixed dwell, board,
+   leave. That's wrong the moment a real Control Room is driving it, because
+   each station's crowd comes from a video clip that takes as long as it
+   takes — auto-departing on a 6-second timer meant the train pulled out of
+   station 2 before its clip had even been loaded, let alone processed.
+
+   So when live, the dwell timer is off entirely: the train docks and HOLDS
+   until the Control Room says the clip is finished (control/train `depart`).
+   `pendingDepart` covers the other order of events — a short clip can finish
+   while the train is still sliding into the platform, and that command has
+   to be honoured once it docks rather than dropped on the floor.            */
+const pipeline = {
+  active:false,            // an MQTT session is driving the run
+  pendingDepart:false,     // depart arrived early — fire it the moment we dock
+  clip:null                // name of the clip the Control Room is processing
+};
+
+/* SEND BATCH is a complete service in itself, exactly like a Control Room clip:
+   the operator names a number of passengers, they walk in, they all board, the
+   train goes. So the button records an intent rather than nudging a dwell
+   timer, and the DOCKED case acts on it once the batch has actually finished
+   arriving — which is the part a timer can't know. Tolerant about ordering the
+   same way pipeline.pendingDepart is: pressed while the train is still sliding
+   in, it fires on docking instead of being dropped. */
+let batchDepart = false;
+
+/* Who owns the coach totals for the boarding round about to happen.
+
+   Normally the rule is simply "live -> MQTT owns `boarded`", because live the
+   crowd came off a video the decision engine also measured, and crediting the
+   walk here as well would count everybody twice. A batch breaks that rule:
+   the operator invented those passengers, no camera saw them and no clip will
+   ever be processed for them, so the engine cannot account for them and never
+   will. Credited to MQTT, a live batch boarded 40 people and the train pulled
+   out reading ONBOARD 0/90.
+
+   So ownership follows the SOURCE of the crowd rather than the mode: a batch
+   is ours to count in either mode, a clip's crowd is the engine's. Note that
+   a later clip departing still resyncs `boarded` to the engine's own tally —
+   the engine is the authority whenever it has something to say, and mixing a
+   hand-sent batch into a clip-driven run will lose the batch at that point. */
+let boardingFromBatch = false;
+
+const stationName = i => STATIONS[i].name;
+const isTerminus  = i => i === STATIONS.length - 1;
+const trainLoad   = () => comps.reduce((s, c) => s + c.boarded, 0);
+const TRAIN_CAP   = CFG.compCapacity * comps.length;
+
+/* --------------------------- THREE.JS SETUP ------------------------------ */
+const stage = document.getElementById('stage');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#080b10');
+scene.fog = new THREE.FogExp2('#080b10', 0.0085);
+
+const camera = new THREE.PerspectiveCamera(57, innerWidth/innerHeight, 0.1, 400);
+camera.position.set(-33.5, 12.4, -14.6);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+// capped well below the usual 2 — on a high-DPI screen 2x is 4x the fill rate
+// for barely any visible sharpness, and fill rate is a main lag source here
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.25));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.02;
+stage.appendChild(renderer.domElement);
+
+// A generic room-shaped light probe gives every metal/glass surface a soft
+// reflection to catch, instead of the flat, matte look of lights alone —
+// the cheapest way to make PBR materials read as real without an HDRI asset.
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.045).texture;
+
+// A CCTV feed doesn't pan for the viewer — the camera is fixed at the mounted
+// angle. OrbitControls is kept around only to compute the initial look-at;
+// all interaction is switched off immediately after.
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(5.5, 0.8, 8.0);
+controls.update();
+controls.enabled = false;
+controls.dispose();
+
+/* Post-processing: a light bloom so the LED strips, signage and headlights
+   actually glow instead of just being bright-colored flat shapes.          */
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+// half-resolution bloom buffer — a quarter the pixels to blur, with no
+// visible difference in a soft glow pass like this one. The scale is a
+// variable rather than a constant because the quality governor below turns
+// it down further (and eventually off) on a machine that can't hold frame
+// rate — see applyQuality().
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.28, 0.32, 0.94);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+/* ---------------------------- ADAPTIVE QUALITY ---------------------------
+   The two heaviest things this scene does — filling pixels at the device's
+   pixel ratio, and the bloom pass's blur chain — are also the two that can
+   be turned down without changing what the scene actually shows. Rather
+   than pick one setting and hope it suits every machine, measure the frame
+   rate and step down a tier when it can't be held, then step back up if the
+   headroom returns. Tier 0 is the full-quality look; nothing below it
+   removes information, only resolution.                                    */
+/* Ordered so that SHARPNESS is the last thing given up, not the first.
+
+   The earlier ladder went straight to a sub-native pixel ratio at tier 2, and
+   because rendering below 1.0 means the browser upscales every pixel, the
+   whole scene visibly softened — the complaint was a blurry Twin, and the
+   render was running at 0.85x. Effects are the cheap thing to lose: bloom is
+   a full blur chain over the frame and dropping it costs a glow nobody is
+   reading data from, while dropping resolution costs legibility of the coach
+   numbers and the LED text, which people ARE reading.
+
+   So tiers 1 and 2 stay at native 1.0 and pay with the bloom pass instead,
+   and only tier 3 — a machine that genuinely cannot hold the frame at native
+   res with no effects at all — goes soft. */
+const QUALITY_TIERS = [
+  { pixelRatio: 1.25, bloom: true,  bloomScale: 0.50 },   // crisp + full glow
+  { pixelRatio: 1.00, bloom: true,  bloomScale: 0.40 },   // crisp, cheaper glow
+  { pixelRatio: 1.00, bloom: false, bloomScale: 0.34 },   // crisp, no glow
+  { pixelRatio: 0.80, bloom: false, bloomScale: 0.34 }    // last resort
+];
+let qualityTier = 0;
+
+function applyQuality() {
+  const q = QUALITY_TIERS[qualityTier];
+  renderer.setPixelRatio(Math.min(devicePixelRatio, q.pixelRatio));
+  renderer.setSize(innerWidth, innerHeight);
+  // composer.setSize() resets every pass to full resolution, so the bloom
+  // buffer has to be re-sized after it, never before
+  composer.setSize(innerWidth, innerHeight);
+  bloom.enabled = q.bloom;
+  bloom.setSize(innerWidth * q.bloomScale, innerHeight * q.bloomScale);
+  requestShadowUpdate(0.2);   // the frozen map is invalid at a new resolution
+}
+
+/* Lighting: dim station ambience + one shadow-casting key light.
+   Intensities sit a notch lower than they would without an environment map —
+   the room-probe reflections on the metal/glass surfaces add their own
+   contribution, so pushing the direct lights this hard would double up.    */
+scene.add(new THREE.HemisphereLight('#a8c8e2', '#1c242c', 0.62));
+scene.add(new THREE.AmbientLight('#a8bfd0', 0.30));
+
+const key = new THREE.DirectionalLight('#e4eefa', 1.05);
+key.position.set(-24, 34, -18);
+key.target.position.set(0, 0, 4);
+key.castShadow = true;
+// 1024, not 2048: a quarter of the shadow rendering cost for a soft shadow
+// at this camera distance that nobody can tell apart
+key.shadow.mapSize.set(1024, 1024);
+const sc = key.shadow.camera;
+sc.left = -46; sc.right = 46; sc.top = 34; sc.bottom = -30; sc.near = 4; sc.far = 96;
+key.shadow.bias = -0.0016;
+key.shadow.normalBias = 0.03;
+scene.add(key, key.target);
+
+/* The shadow map is a second, complete render of the scene, and it was being
+   redrawn on every single frame for a station where nothing that casts a
+   shadow ever moves — the crowd has castShadow off entirely (see
+   loadCharacterKit), so the only mover in the whole scene is the train.
+   Freezing the map and refreshing it only while the train is sliding removes
+   an entire scene pass per frame for the whole time it is standing still,
+   which is most of a run.                                                  */
+key.shadow.autoUpdate = false;
+key.shadow.needsUpdate = true;
+let shadowHoldUntil = 0;
+
+/* Redraw the shadow map for the next `secs` of animation. Called while the
+   train is moving, and after anything that invalidates a frozen map (a
+   resize, a quality change). */
+function requestShadowUpdate(secs = 0.2) {
+  shadowHoldUntil = Math.max(shadowHoldUntil, simTime + secs);
+  key.shadow.needsUpdate = true;
+}
+
+// Three fixtures lit, not five. Every light in the scene is evaluated per
+// fragment by every standard material in it — there is no per-object light
+// culling in the default renderer — so the point-light count is a straight
+// multiplier on fill cost, and this platform was carrying fifteen of them
+// between the ceiling, the track side, the LED strips and the coaches. This
+// row was the cheapest pair to give up; range and intensity are lifted so the
+// same stretch of platform still reads as lit.
+for (const px of [-24, 0, 24]) {
+  const p = new THREE.PointLight('#d6e8f7', 105, 62, 2);
+  p.position.set(px, 11.4, -2);
+  scene.add(p);
+}
+const trainGlow = new THREE.PointLight('#ffe6bd', 55, 34, 2);
+trainGlow.position.set(0, 3.0, 12.8);
+scene.add(trainGlow);
+
+/* ------------------------------ HELPERS ---------------------------------- */
+const mat = (c, o = {}) => new THREE.MeshStandardMaterial({ color:c, roughness:0.85, metalness:0.05, ...o });
+
+function box(w, h, d, m, x, y, z, parent = scene, shadow = true) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = shadow; mesh.receiveShadow = shadow;
+  parent.add(mesh);
+  return mesh;
+}
+
+function plane(w, h, m, parent = scene) {
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
+  parent.add(mesh);
+  return mesh;
+}
+
+function canvasTex(w, h, draw) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  draw(g, w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 8;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function roundRect(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+
+const rnd  = (a, b) => a + Math.random() * (b - a);
+const irnd = (a, b) => Math.floor(rnd(a, b + 1));
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const ease  = { in:t => t*t*t, out:t => 1 - Math.pow(1 - t, 3) };
+
+/* =========================== STATION GEOMETRY ============================= */
+const MATS = {
+  floor    : mat('#8d9198', { roughness:0.38, metalness:0.16 }),
+  floorDark: mat('#6d737c', { roughness:0.6 }),
+  edge     : mat('#3c4249', { roughness:0.9 }),
+  wall     : mat('#9aa0a7', { roughness:0.92 }),
+  wallDark : mat('#575e66', { roughness:0.95 }),
+  purple   : mat('#54407f', { roughness:0.6 }),
+  ceil     : mat('#39424c', { roughness:0.95 }),
+  ballast  : mat('#191d22', { roughness:1.0 }),
+  steel    : mat('#b9c2cb', { roughness:0.34, metalness:0.72 }),
+  steelDark: mat('#4a525b', { roughness:0.5, metalness:0.55 }),
+  yellow   : new THREE.MeshBasicMaterial({ color:'#e8c020' }),
+  glass    : new THREE.MeshStandardMaterial({ color:'#16232e', roughness:0.16, metalness:0.35,
+                                              transparent:true, opacity:0.42 })
+};
+
+/* --- platform slab ------------------------------------------------------- */
+const PW = L.platX1 - L.platX0, PD = L.platZ1 - L.platZ0;
+const slab = box(PW, L.platH, PD, MATS.edge, (L.platX0+L.platX1)/2, -L.platH/2, (L.platZ0+L.platZ1)/2);
+slab.receiveShadow = true;
+
+const floor = plane(PW, PD, MATS.floor);
+floor.rotation.x = -Math.PI/2;
+floor.position.set((L.platX0+L.platX1)/2, 0.001, (L.platZ0+L.platZ1)/2);
+floor.receiveShadow = true;
+
+// tile grid overlay — each tile gets a slightly different tone so the floor
+// doesn't read as one flat, uniform material repeated forever
+const TILE_N = 8;
+const tileTex = canvasTex(1024, 1024, (g, w, h) => {
+  const cell = w / TILE_N;
+  for (let ry = 0; ry < TILE_N; ry++) {
+    for (let rx = 0; rx < TILE_N; rx++) {
+      const shade = 154 + Math.floor(rnd(-9, 7));
+      g.fillStyle = `rgb(${shade},${shade+4},${shade+7})`;
+      g.fillRect(rx*cell, ry*cell, cell+1, cell+1);
+      // faint diagonal sheen so tiles aren't perfectly flat-shaded
+      const grad = g.createLinearGradient(rx*cell, ry*cell, rx*cell+cell, ry*cell+cell);
+      grad.addColorStop(0, 'rgba(255,255,255,.05)');
+      grad.addColorStop(0.5, 'rgba(255,255,255,0)');
+      grad.addColorStop(1, 'rgba(0,0,0,.04)');
+      g.fillStyle = grad;
+      g.fillRect(rx*cell, ry*cell, cell, cell);
+    }
+  }
+  g.strokeStyle = 'rgba(55,61,69,.55)'; g.lineWidth = 3;
+  for (let i = 0; i <= TILE_N; i++) {
+    const p = i * cell;
+    g.beginPath(); g.moveTo(p, 0); g.lineTo(p, h); g.stroke();
+    g.beginPath(); g.moveTo(0, p); g.lineTo(w, p); g.stroke();
+  }
+});
+tileTex.wrapS = tileTex.wrapT = THREE.RepeatWrapping;
+tileTex.repeat.set(PW/3.5, PD/3.5);
+MATS.floor.map = tileTex;
+
+// grout recesses read as real depth under the key light, not just flat lines
+const tileBump = canvasTex(1024, 1024, (g, w, h) => {
+  const cell = w / TILE_N;
+  g.fillStyle = '#808080'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#000000'; g.lineWidth = 5;
+  for (let i = 0; i <= TILE_N; i++) {
+    const p = i * cell;
+    g.beginPath(); g.moveTo(p, 0); g.lineTo(p, h); g.stroke();
+    g.beginPath(); g.moveTo(0, p); g.lineTo(w, p); g.stroke();
+  }
+});
+tileBump.wrapS = tileBump.wrapT = THREE.RepeatWrapping;
+tileBump.repeat.copy(tileTex.repeat);
+MATS.floor.bumpMap = tileBump;
+MATS.floor.bumpScale = 0.018;
+MATS.floor.envMapIntensity = 0.55;
+MATS.floor.needsUpdate = true;
+
+// platform edge nosing + track pit
+box(PW, L.platH + 0.04, 0.34, mat('#c8ccd2', { roughness:0.7 }), 0, -L.platH/2, L.platZ1 - 0.17);
+box(PW, 0.6, 22, MATS.ballast, 0, -L.platH - 0.3, 15, scene, false);
+for (const rz of [10.6, 15.0]) {
+  box(PW, 0.22, 0.18, MATS.steel, 0, -L.platH + 0.1, rz, scene, false);
+}
+
+/* --- yellow safety line + tactile strip ---------------------------------- */
+const safeLine = plane(PW, 0.34, MATS.yellow);
+safeLine.rotation.x = -Math.PI/2;
+safeLine.position.set(0, 0.012, L.safeZ);
+
+const tactileTex = canvasTex(64, 64, (g, w, h) => {
+  g.fillStyle = '#d8b41c'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#a88a10';
+  for (let y = 8; y < h; y += 16) for (let x = 8; x < w; x += 16) {
+    g.beginPath(); g.arc(x, y, 4, 0, 7); g.fill();
+  }
+});
+tactileTex.wrapS = tactileTex.wrapT = THREE.RepeatWrapping;
+tactileTex.repeat.set(PW/1.1, 1);
+const tactile = plane(PW, 0.75, new THREE.MeshStandardMaterial({ map:tactileTex, roughness:0.8 }));
+tactile.rotation.x = -Math.PI/2;
+tactile.position.set(0, 0.010, L.safeZ - 0.62);
+tactile.receiveShadow = true;
+
+// second tactile guide line further back (matches station layouts)
+const tactile2 = tactile.clone();
+tactile2.position.set(0, 0.010, L.restZ0 - 1.4);
+scene.add(tactile2);
+
+/* --- back wall, tunnel wall, ceiling ------------------------------------- */
+const backWall = plane(PW, 15, MATS.wall);
+backWall.position.set(0, 7.5, L.platZ0);
+backWall.receiveShadow = true;
+
+const wallStripe = plane(PW, 0.5, new THREE.MeshBasicMaterial({ color:'#54407f' }));
+wallStripe.position.set(0, 4.15, L.platZ0 + 0.02);
+
+const wallBase = plane(PW, 1.5, MATS.wallDark);
+wallBase.position.set(0, 0.75, L.platZ0 + 0.02);
+
+// wall panel seams — soft per-panel tone variation plus grime streaking near
+// the base so the panels read as physical cladding, not a flat color fill
+const seamTex = canvasTex(512, 512, (g, w, h) => {
+  const shade = 158 + Math.floor(rnd(-6, 8));
+  g.fillStyle = `rgb(${shade},${shade+5},${shade+9})`; g.fillRect(0, 0, w, h);
+  const sheen = g.createLinearGradient(0, 0, w, h);
+  sheen.addColorStop(0, 'rgba(255,255,255,.06)');
+  sheen.addColorStop(0.55, 'rgba(255,255,255,0)');
+  sheen.addColorStop(1, 'rgba(0,0,0,.05)');
+  g.fillStyle = sheen; g.fillRect(0, 0, w, h);
+  g.strokeStyle = 'rgba(65,71,79,.55)'; g.lineWidth = 4;
+  g.strokeRect(0, 0, w, h);
+  g.strokeStyle = 'rgba(65,71,79,.24)'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(0, h/2); g.lineTo(w, h/2); g.stroke();
+  // subtle vertical grime streaks toward the base
+  g.fillStyle = 'rgba(30,34,38,.05)';
+  for (let i = 0; i < 5; i++) {
+    const x = rnd(0, w), sw = rnd(6, 22);
+    g.fillRect(x, h*0.55, sw, h*0.45);
+  }
+});
+seamTex.wrapS = seamTex.wrapT = THREE.RepeatWrapping;
+seamTex.repeat.set(PW/4, 15/4);
+MATS.wall.map = seamTex;
+MATS.wall.roughness = 0.86;
+MATS.wall.envMapIntensity = 0.35;
+MATS.wall.needsUpdate = true;
+
+const farWall = plane(PW + 40, 20, MATS.wallDark);
+farWall.position.set(0, 7, 23);
+farWall.rotation.y = Math.PI;
+
+const ceil = plane(PW, PD + 34, MATS.ceil);
+ceil.rotation.x = Math.PI/2;   // faces down only -> never blocks an orbiting camera
+ceil.position.set(0, L.ceilY, 2);
+
+// ceiling ducting
+for (const cz of [-10, 1]) box(PW, 0.55, 1.3, mat('#2b333b', { roughness:0.8 }), 0, L.ceilY - 0.45, cz);
+
+/* --- ceiling light fixtures ---------------------------------------------- */
+const fixtureMat = new THREE.MeshBasicMaterial({ color:'#e9f4ff' });
+for (let x = L.platX0 + 5; x < L.platX1; x += 9) {
+  for (const cz of [-7.5, 3.5, 13.5]) {
+    box(5.2, 0.22, 0.44, mat('#4a545e'), x, L.ceilY - 0.22, cz, scene, false);
+    const g = box(4.9, 0.09, 0.32, fixtureMat, x, L.ceilY - 0.36, cz, scene, false);
+    g.renderOrder = 1;
+  }
+}
+// fill light over the track so the tunnel side isn't pitch black
+for (const px of [-16, 14]) {
+  const p = new THREE.PointLight('#bcd2e6', 110, 56, 2);
+  p.position.set(px, 11.0, 13.0);
+  scene.add(p);
+}
+// Cheap ambient lift on the big surfaces instead of another row of point
+// lights — keeps the concourse side reading as concrete rather than void.
+MATS.wall.emissive     = new THREE.Color('#414952'); MATS.wall.emissiveIntensity = 1;
+MATS.wallDark.emissive = new THREE.Color('#242a31'); MATS.wallDark.emissiveIntensity = 1;
+MATS.ceil.emissive     = new THREE.Color('#1b2027'); MATS.ceil.emissiveIntensity = 1;
+MATS.floor.emissive    = new THREE.Color('#1a1f25'); MATS.floor.emissiveIntensity = 1;
+
+/* --- pillars (kept away from the camera end so they don't block the view) - */
+for (const x of [-12, 5, 22]) {
+  box(1.4, L.ceilY, 1.4, mat('#aab0b7', { roughness:0.8 }), x, L.ceilY/2, L.platZ0 + 1.4);
+  box(1.8, 0.3, 1.8, MATS.wallDark, x, L.ceilY - 0.2, L.platZ0 + 1.4);
+}
+// the signage column at the near end (left edge of the CCTV frame)
+const SIGN_COL = { x:-8, z:L.platZ0 + 5.4 };
+box(1.9, 7.6, 2.9, mat('#c6ccd2', { roughness:0.75 }), SIGN_COL.x, 3.8, SIGN_COL.z);
+box(2.3, 0.28, 3.3, MATS.wallDark, SIGN_COL.x, 7.7, SIGN_COL.z);
+box(2.4, 0.22, 3.4, MATS.wallDark, SIGN_COL.x, 0.11, SIGN_COL.z);
+
+/* =============================== SIGNAGE ================================== */
+function signMesh(w, h, tex, x, y, z, ry = 0, glow = 0.0) {
+  const m = new THREE.MeshStandardMaterial({ map:tex, roughness:0.5,
+    emissive:new THREE.Color('#ffffff'), emissiveMap:tex, emissiveIntensity:glow });
+  const s = plane(w, h, m);
+  s.position.set(x, y, z);
+  s.rotation.y = ry;
+  return s;
+}
+
+const HIN = '"Nirmala UI","Noto Sans Devanagari",system-ui,sans-serif';
+
+/* --- station-dependent signs: repainted every time the train moves on ----- */
+function liveCanvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace;
+  return { c, g:c.getContext('2d'), t };
+}
+
+const SIGN = {
+  route: liveCanvas(1024, 224),   // hanging "towards …" sign
+  name : liveCanvas(400, 620),    // station-number column
+  stops: liveCanvas(420, 620)     // line diagram with the current stop marked
+};
+
+signMesh(8.4, 1.84, SIGN.route.t, -6, 6.7, -0.6, Math.PI, 0.5);
+box(0.12, 5.4, 0.12, MATS.steelDark, -9.6, 10.3, -0.6, scene, false);
+box(0.12, 5.4, 0.12, MATS.steelDark, -2.4, 10.3, -0.6, scene, false);
+signMesh(2.4, 3.7, SIGN.name.t,  SIGN_COL.x - 0.97, 5.5, SIGN_COL.z, -Math.PI/2, 0.30);
+signMesh(2.2, 3.0, SIGN.stops.t, SIGN_COL.x - 0.97, 2.05, SIGN_COL.z, -Math.PI/2, 0.16);
+
+function paintStationSigns() {
+  const i = run.station;
+  const st = STATIONS[i];
+  const terminus = STATIONS[STATIONS.length - 1].name;
+
+  /* hanging route sign */
+  {
+    const { g, t, c } = SIGN.route, w = c.width, h = c.height;
+    g.fillStyle = '#0f2f6b'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#7fa4dd'; g.lineWidth = 5; g.strokeRect(4, 4, w-8, h-8);
+    g.textAlign = 'left'; g.textBaseline = 'middle';
+    g.fillStyle = '#ffffff';
+    g.font = 'bold 92px sans-serif';   g.fillText(String(st.id), 34, h/2);
+    g.font = '74px sans-serif';        g.fillText('→', 106, h/2 + 2);
+    g.font = '42px sans-serif';        g.fillText(`Towards ${terminus}`, 196, h/2 - 32);
+    g.font = '34px sans-serif';        g.fillStyle = '#b8ccec';
+    g.fillText(isTerminus(i) ? 'This station is the terminus'
+                             : `Next stop — ${STATIONS[i+1].name}`, 196, h/2 + 30);
+    g.strokeStyle = '#ffffff'; g.lineWidth = 4;
+    roundRect(g, w - 150, h/2 - 40, 110, 78, 8); g.stroke();
+    g.fillStyle = '#ffffff'; g.fillRect(w - 138, h/2 - 28, 86, 34);
+    t.needsUpdate = true;
+  }
+
+  /* station-number column */
+  {
+    const { g, t, c } = SIGN.name, w = c.width, h = c.height;
+    g.fillStyle = '#4d3c76'; g.fillRect(0, 0, w, h);
+    g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+    g.fillStyle = '#e9e4f5';
+    g.font = '42px ' + HIN;      g.fillText('स्टेशन', w/2, 80);
+    g.font = '36px sans-serif';  g.fillText('Station', w/2, 130);
+    g.font = 'bold 280px sans-serif'; g.fillText(String(st.id), w/2, 410);
+    g.font = '34px sans-serif';  g.fillStyle = '#d6cdee';
+    let nm = st.name, sz = 34;
+    while (g.measureText(nm).width > w - 36 && sz > 20) { sz--; g.font = sz + 'px sans-serif'; }
+    g.fillText(nm, w/2, 490);
+    g.fillStyle = '#8f7fc0'; g.font = '26px sans-serif';
+    g.fillText(isTerminus(i) ? 'TERMINUS' : 'DOWN LINE', w/2, 545);
+    t.needsUpdate = true;
+  }
+
+  /* line diagram */
+  {
+    const { g, t, c } = SIGN.stops, w = c.width, h = c.height;
+    g.fillStyle = '#f2f0f7'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#6b6482'; g.font = '26px sans-serif'; g.textAlign = 'left';
+    g.fillText('LINE 2 · DOWN', 30, 46);
+    const top = 92, gap = (h - top - 60) / (STATIONS.length - 1);
+    g.strokeStyle = '#54407f'; g.lineWidth = 9;
+    g.beginPath(); g.moveTo(46, top); g.lineTo(46, top + gap * (STATIONS.length - 1)); g.stroke();
+    STATIONS.forEach((s, k) => {
+      const y = top + k * gap;
+      const here = k === i, past = k < i;
+      g.fillStyle = here ? '#e0342f' : past ? '#a89ec4' : '#54407f';
+      g.beginPath(); g.arc(46, y, here ? 19 : 13, 0, 7); g.fill();
+      if (here) { g.strokeStyle = '#e0342f'; g.lineWidth = 4;
+                  g.beginPath(); g.arc(46, y, 28, 0, 7); g.stroke(); }
+      g.fillStyle = here ? '#1d1730' : past ? '#a09ab0' : '#2c2440';
+      g.font = (here ? 'bold ' : '') + '32px sans-serif';
+      g.fillText(`${s.id}  ${s.name}`, 88, y + 11);
+    });
+    t.needsUpdate = true;
+  }
+}
+
+/* Wall notice */
+const noticeTex = canvasTex(760, 190, (g, w, h) => {
+  g.fillStyle = '#12306e'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#fff'; g.textAlign = 'center';
+  g.font = '44px ' + HIN;  g.fillText('कृपया पीली लाइन के पीछे खड़े रहें', w/2, 74);
+  g.font = '34px sans-serif'; g.fillText('Please stand behind the yellow line', w/2, 134);
+});
+signMesh(5.2, 1.3, noticeTex, 12, 5.4, L.platZ0 + 0.03, 0, 0.35);
+
+/* Operator roundel */
+const roundelTex = canvasTex(300, 300, (g, w, h) => {
+  g.fillStyle = '#f4f6f8'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#c0392b'; g.lineWidth = 16;
+  g.beginPath(); g.arc(w/2, h/2 - 18, 92, 0, 7); g.stroke();
+  g.strokeStyle = '#c0392b'; g.lineWidth = 20;
+  g.beginPath(); g.moveTo(w/2 - 60, h/2 + 30); g.lineTo(w/2 + 60, h/2 - 62); g.stroke();
+  g.fillStyle = '#333'; g.textAlign = 'center'; g.font = '30px sans-serif';
+  g.fillText('METRO RAIL', w/2, h - 22);
+});
+signMesh(1.5, 1.5, roundelTex, 17.4, 5.4, L.platZ0 + 0.03, 0, 0.2);
+
+/* Floor exit decals near the entrance */
+const exitTex = canvasTex(256, 256, (g, w, h) => {
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = 'rgba(84,64,127,.85)';
+  g.beginPath(); g.arc(w/2, h/2, 120, 0, 7); g.fill();
+  g.fillStyle = '#efeaff'; g.textAlign = 'center';
+  g.save(); g.translate(w/2, h/2); g.rotate(-0.15);
+  g.font = 'bold 74px sans-serif'; g.fillText('↑', 0, -8);
+  g.font = '34px sans-serif'; g.fillText('Exit', 0, 54);
+  g.restore();
+});
+for (const [ex, ez] of [[-24.5, -11.4], [-17.5, -11.9]]) {
+  const d = plane(2.6, 2.6, new THREE.MeshBasicMaterial({ map:exitTex, transparent:true }));
+  d.rotation.x = -Math.PI/2; d.rotation.z = Math.PI/2;
+  d.position.set(ex, 0.015, ez);
+}
+
+/* --- zone boundary marks on the floor ------------------------------------ */
+for (const bx of [ZONES[0].x0, ZONES[1].x0, ZONES[2].x0, ZONES[2].x1]) {
+  const m = plane(0.18, (L.ledZ1 - L.ledZ0) + 1.6, new THREE.MeshBasicMaterial({ color:'#e8eef4' }));
+  m.rotation.x = -Math.PI/2;
+  m.position.set(bx, 0.014, (L.ledZ0 + L.ledZ1)/2 - 0.2);
+}
+
+/* ============================ LED ZONE STRIPS ============================= */
+zones.forEach(z => {
+  const w = z.x1 - z.x0, d = L.ledZ1 - L.ledZ0;
+
+  // glow bed (additive, sits just above the floor)
+  const glowMat = new THREE.MeshBasicMaterial({
+    color: COL.low.clone(), transparent:true, opacity:0.30,
+    blending:THREE.AdditiveBlending, depthWrite:false
+  });
+  const glow = plane(w + 1.0, d + 2.6, glowMat);
+  glow.rotation.x = -Math.PI/2;
+  glow.position.set(z.cx, 0.020, (L.ledZ0 + L.ledZ1)/2);
+  glow.renderOrder = 2;
+
+  // the lit strip itself, with the status caption printed on it
+  const c = document.createElement('canvas');
+  c.width = 1400; c.height = 170;
+  const ctx = c.getContext('2d');
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 8; tex.colorSpace = THREE.SRGBColorSpace;
+
+  const stripMat = new THREE.MeshBasicMaterial({ map:tex, transparent:true, depthWrite:false });
+  const strip = plane(w - 0.25, d, stripMat);
+  strip.rotation.x = -Math.PI/2;
+  strip.rotation.z = Math.PI;           // caption reads along the platform
+  strip.position.set(z.cx, 0.030, (L.ledZ0 + L.ledZ1)/2);
+  strip.renderOrder = 3;
+
+  // thin bright kerb light at the platform edge
+  const kerbMat = new THREE.MeshBasicMaterial({ color:COL.low.clone() });
+  const kerb = plane(w - 0.25, 0.16, kerbMat);
+  kerb.rotation.x = -Math.PI/2;
+  kerb.position.set(z.cx, 0.032, L.ledZ1 + 0.16);
+  kerb.renderOrder = 3;
+
+  // soft light spill so the crowd nearby picks up the zone colour
+  const light = new THREE.PointLight(HEX.low, 9, 26, 2);
+  light.position.set(z.cx, 1.1, L.ledZ1 - 0.4);
+  scene.add(light);
+
+  z.led = { glow, glowMat, strip, stripMat, ctx, tex, kerbMat, light, canvas:c };
+
+  // floating count/status board above the zone
+  const sc2 = document.createElement('canvas');
+  sc2.width = 512; sc2.height = 256;   // extra height for the confidence/sparkline row
+  const sctx = sc2.getContext('2d');
+  const stex = new THREE.CanvasTexture(sc2);
+  stex.colorSpace = THREE.SRGBColorSpace; stex.anisotropy = 8;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:stex, transparent:true, depthTest:true }));
+  sp.scale.set(4.5, 2.25, 1);
+  sp.position.set(z.cx, 6.5, -7.5);
+  scene.add(sp);
+  z.sprite = sp; z.spriteCtx = sctx; z.spriteTex = stex; z.spriteCanvas = sc2;
+});
+
+function paintLed(z) {
+  // repaint on the advice, not just the colour — "BOARD HERE" vs a plain
+  // green needs a redraw even though both are low
+  const key = z.status + (z.idx === bestCoach() ? '*' : '');
+  if (z.lastLedKey === key) return;
+  z.lastLedKey = key;
+  const isBest = z.idx === bestCoach();
+
+  const g = z.led.ctx, w = z.led.canvas.width, h = z.led.canvas.height;
+  const hex = HEX[z.status];
+  g.clearRect(0, 0, w, h);
+
+  const grd = g.createLinearGradient(0, 0, 0, h);
+  grd.addColorStop(0, hexA(hex, 0.10));
+  grd.addColorStop(0.5, hexA(hex, 0.62));
+  grd.addColorStop(1, hexA(hex, 0.10));
+  g.fillStyle = grd; g.fillRect(0, 0, w, h);
+
+  g.fillStyle = hexA(hex, 0.95);
+  g.fillRect(0, h - 12, w, 12);
+  g.fillRect(0, 0, w, 6);
+
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = '#ffffff';
+  g.shadowColor = hex; g.shadowBlur = 26;
+  g.font = 'bold 72px ' + '"JetBrains Mono",Consolas,monospace';
+  // the emptiest coach gets the positive instruction outright, whatever its
+  // own bucket — at a genuinely busy stop every coach can be amber, and the
+  // strip still has to point somewhere
+  const advice = isBest && z.status !== 'high' ? 'BOARD HERE — LEAST FULL' : STATUS_TEXT[z.status];
+  g.fillText(`${z.name}  ·  ${advice}`, w/2, h/2);
+  g.shadowBlur = 0;
+
+  // direction arrows toward the doors
+  g.fillStyle = hexA(hex, 0.9);
+  g.font = 'bold 74px sans-serif';
+  g.fillText('◄', 96, h/2);
+  g.fillText('►', w - 96, h/2);
+
+  z.led.tex.needsUpdate = true;
+  z.led.glowMat.color.copy(COL[z.status]);
+  z.led.kerbMat.color.copy(COL[z.status]);
+  z.led.light.color.set(hex);
+}
+
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+}
+
+function paintZoneSprite(z) {
+  // every arrival now repaints all three boards (the "least full" advice on
+  // one depends on the load of the others), so skip the redraw when nothing
+  // this board shows has actually moved
+  const key = `${z.load}|${z.status}|${z.count}|${comps[z.idx].boarded}|${z.trend}|${z.confidence}|${z.hist.join()}`;
+  if (z.lastSpriteKey === key) return;
+  z.lastSpriteKey = key;
+
+  const g = z.spriteCtx, w = z.spriteCanvas.width, h = z.spriteCanvas.height;
+  const hex = HEX[z.status];
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = 'rgba(6,10,14,.78)';
+  roundRect(g, 6, 6, w - 12, h - 12, 12); g.fill();
+  g.strokeStyle = hexA(hex, 0.7); g.lineWidth = 3; g.stroke();
+
+  g.fillStyle = hex; g.fillRect(6, 6, 10, h - 12);
+
+  g.textBaseline = 'middle';
+  g.textAlign = 'left';
+  g.fillStyle = '#cfe0ec';
+  g.font = '30px "JetBrains Mono",Consolas,monospace';
+  g.fillText(z.name, 34, 46);
+
+  // the headline number is the projected compartment load, not the platform
+  // queue — that's the figure the passenger is choosing between
+  g.fillStyle = '#ffffff';
+  g.font = 'bold 92px "JetBrains Mono",Consolas,monospace';
+  g.fillText(String(z.load), 34, 128);
+  const lw = g.measureText(String(z.load)).width;
+  g.fillStyle = '#5c7386';
+  g.font = '34px "JetBrains Mono",Consolas,monospace';
+  g.fillText(`/ ${CFG.compCapacity}`, 44 + lw, 140);
+
+  g.fillStyle = hex;
+  g.font = 'bold 30px "JetBrains Mono",Consolas,monospace';
+  g.textAlign = 'right';
+  g.fillText(STATUS_SHORT[z.status], w - 30, 46);
+
+  const arrow = z.trend === 'rising' ? '▲ RISING' : z.trend === 'falling' ? '▼ FALLING' : '► STEADY';
+  g.fillStyle = z.trend === 'rising' ? '#ff8a72' : z.trend === 'falling' ? '#7fd8ff' : '#9fb3c2';
+  g.font = '28px "JetBrains Mono",Consolas,monospace';
+  g.fillText(arrow, w - 30, 128);
+
+  // the split behind that headline: who is aboard vs who is still queuing
+  g.fillStyle = '#5c7386';
+  g.font = '24px "JetBrains Mono",Consolas,monospace';
+  g.fillText(`ONBOARD ${comps[z.idx].boarded}`, w - 30, 182);
+  g.textAlign = 'left';
+  g.fillText(`QUEUE ${z.count}`, 34, 182);
+
+  // AI confidence + a short crowd-history sparkline — the same
+  // stability-based reading shown in the operations console readout
+  g.fillStyle = '#7fa6c2';
+  g.font = '22px "JetBrains Mono",Consolas,monospace';
+  g.textAlign = 'left';
+  g.fillText(`CONF ${z.confidence}%`, 34, 224);
+  g.textAlign = 'right';
+  g.font = '26px "JetBrains Mono",Consolas,monospace';
+  g.fillText(sparkline(z.hist), w - 30, 224);
+
+  z.spriteTex.needsUpdate = true;
+}
+
+/* ================================ TRAIN =================================== */
+const trainGroup = new THREE.Group();
+scene.add(trainGroup);
+train.group = trainGroup;
+
+const TR = {
+  x0:-29.5, x1:29.5,
+  z0:L.trainZ0, z1:L.trainZ1,
+  y0:0.10, y1:L.trainH,
+  doorW:4.6, doorH:2.7,        // one wide door per compartment, centred on its zone
+  doorOffsets:[0]
+};
+const TW = TR.z1 - TR.z0, TL = TR.x1 - TR.x0;
+// top surface of the coach floor slab below (centre TR.y0+0.14, 0.28 thick) —
+// the height anyone standing inside the train has their feet at
+const TRAIN_FLOOR_Y = TR.y0 + 0.28;
+
+const bodyMat  = new THREE.MeshPhysicalMaterial({ color:'#c8cdd2', roughness:0.28, metalness:0.72,
+                                                  clearcoat:0.6, clearcoatRoughness:0.28, envMapIntensity:1.1 });
+const roofMat  = mat('#7f878f', { roughness:0.65, metalness:0.4, envMapIntensity:0.7 });
+const insideMat= mat('#b0a794', { roughness:0.9 });
+const insideWallMat = new THREE.MeshStandardMaterial({ color:'#c8c2b2', roughness:0.85,
+                                                       emissive:'#3a3427', emissiveIntensity:1 });
+const skirtMat = mat('#3b4148', { roughness:0.85 });
+
+/* floor, roof, far side, ends */
+box(TL, 0.28, TW, insideMat, 0, TR.y0 + 0.14, (TR.z0+TR.z1)/2, trainGroup);
+box(TL, 0.30, TW, roofMat,   0, TR.y1 + 0.05, (TR.z0+TR.z1)/2, trainGroup);
+box(TL, 0.20, TW - 1.2, new THREE.MeshBasicMaterial({ color:'#fff0d2' }), 0, TR.y1 - 0.22, (TR.z0+TR.z1)/2, trainGroup, false);
+box(TL, TR.y1 - TR.y0, 0.24, bodyMat, 0, (TR.y0+TR.y1)/2, TR.z1 - 0.12, trainGroup);
+// bright inner face of the far wall — makes an open doorway read as a lit interior
+box(TL - 0.4, TR.y1 - TR.y0 - 0.4, 0.08, insideWallMat, 0, (TR.y0+TR.y1)/2, TR.z1 - 0.28, trainGroup, false);
+box(0.5, TR.y1 - TR.y0 + 0.4, TW, mat('#9aa1a9', { roughness:0.5, metalness:0.5 }), TR.x0 - 0.25, (TR.y0+TR.y1)/2, (TR.z0+TR.z1)/2, trainGroup);
+box(0.5, TR.y1 - TR.y0 + 0.4, TW, mat('#9aa1a9', { roughness:0.5, metalness:0.5 }), TR.x1 + 0.25, (TR.y0+TR.y1)/2, (TR.z0+TR.z1)/2, trainGroup);
+box(TL + 1.4, 0.9, TW - 0.6, skirtMat, 0, TR.y0 - 0.45, (TR.z0+TR.z1)/2, trainGroup);
+
+/* bogies */
+for (const bx of [-24, -12.5, -6, 6, 12.5, 24]) {
+  box(3.4, 0.9, TW - 1.6, mat('#23282e', { roughness:0.9 }), bx, -0.85, (TR.z0+TR.z1)/2, trainGroup, false);
+}
+
+/* near (platform-facing) side: wall segments with door gaps + windows */
+const doorSpans = [];
+comps.forEach(c => TR.doorOffsets.forEach(o => doorSpans.push([c.cx + o - TR.doorW/2, c.cx + o + TR.doorW/2])));
+doorSpans.sort((a, b) => a[0] - b[0]);
+
+let cursor = TR.x0;
+const wallPieces = [];
+for (const [a, b] of doorSpans) {
+  if (a > cursor) wallPieces.push([cursor, a]);
+  cursor = b;
+}
+if (cursor < TR.x1) wallPieces.push([cursor, TR.x1]);
+
+for (const [a, b] of wallPieces) {
+  const w = b - a, cx = (a + b)/2;
+  box(w, TR.y1 - TR.y0, 0.22, bodyMat, cx, (TR.y0 + TR.y1)/2, TR.z0 + 0.11, trainGroup);
+  if (w > 1.6) {
+    const win = plane(w - 0.55, 1.55, MATS.glass);
+    win.position.set(cx, 2.72, TR.z0 - 0.02);
+    win.rotation.y = Math.PI;
+    trainGroup.add(win);
+  }
+}
+/* above/below each door opening */
+for (const [a, b] of doorSpans) {
+  const w = b - a, cx = (a + b)/2;
+  box(w, TR.y1 - (TR.y0 + TR.doorH) + 0.1, 0.22, bodyMat, cx, (TR.y0 + TR.doorH + TR.y1)/2 + 0.05, TR.z0 + 0.11, trainGroup);
+}
+
+/* livery stripe + skirt line */
+const stripe = plane(TL, 0.36, new THREE.MeshBasicMaterial({ color:'#54407f' }));
+stripe.position.set(0, 1.02, TR.z0 - 0.03); stripe.rotation.y = Math.PI;
+trainGroup.add(stripe);
+const stripe2 = plane(TL, 0.14, new THREE.MeshBasicMaterial({ color:'#2ea3d8' }));
+stripe2.position.set(0, 1.30, TR.z0 - 0.03); stripe2.rotation.y = Math.PI;
+trainGroup.add(stripe2);
+
+/* compartment dividers inside */
+for (const dx of [-9, 9]) {
+  box(0.22, TR.y1 - TR.y0 - 0.9, TW - 2.4, mat('#8e9299', { roughness:0.6 }), dx, (TR.y0+TR.y1)/2, (TR.z0+TR.z1)/2 + 0.9, trainGroup);
+}
+
+/* doors + per-compartment fill bar */
+const doorMat  = mat('#dfe4e9', { roughness:0.3, metalness:0.5 });
+const doorGlass= new THREE.MeshStandardMaterial({ color:'#1a2b38', roughness:0.14, metalness:0.4,
+                                                  transparent:true, opacity:0.5 });
+comps.forEach(c => {
+  TR.doorOffsets.forEach(o => {
+    // door frame — three thin members so the opening itself stays clear
+    const jm = mat('#767d85', { roughness:0.7 });
+    box(TR.doorW + 0.36, 0.2, 0.16, jm, c.cx + o, TR.y0 + TR.doorH + 0.1, TR.z0 + 0.16, trainGroup);
+    for (const s of [-1, 1]) {
+      box(0.18, TR.doorH + 0.2, 0.16, jm, c.cx + o + s * (TR.doorW/2 + 0.09),
+          TR.y0 + (TR.doorH + 0.2)/2, TR.z0 + 0.16, trainGroup);
+    }
+    for (const side of [-1, 1]) {
+      const d = new THREE.Group();
+      const panel = box(TR.doorW/2 - 0.03, TR.doorH, 0.14, doorMat, 0, 0, 0, d);
+      const gl = plane(TR.doorW/2 - 0.35, TR.doorH - 0.9, doorGlass, d);
+      gl.position.set(0, 0.28, -0.10); gl.rotation.y = Math.PI;
+      d.position.set(c.cx + o + side * TR.doorW/4, TR.y0 + TR.doorH/2, TR.z0 + 0.06);
+      d.userData = { baseX:c.cx + o + side * TR.doorW/4, side, o };
+      trainGroup.add(d);
+      (side < 0 ? c.doorsL : c.doorsR).push(d);
+    }
+  });
+
+  // interior light so boarded figures are visible through the doorways
+  const il = new THREE.PointLight('#ffe9c4', 34, 15, 2);
+  il.position.set(c.cx, 2.6, (TR.z0 + TR.z1)/2 + 0.6);
+  trainGroup.add(il);
+  c.light = il;   // kept so the train-fade pass can dim it along with the body
+
+  // exterior fill bar above the doors
+  const bw = 13.0;
+  const bg = plane(bw + 0.22, 0.68, new THREE.MeshBasicMaterial({ color:'#0e1318' }));
+  bg.position.set(c.cx, 3.72, TR.z0 - 0.05); bg.rotation.y = Math.PI;
+  trainGroup.add(bg);
+  const fmat = new THREE.MeshBasicMaterial({ color:COL.low.clone(), transparent:true, opacity:0.95 });
+  const fill = plane(bw, 0.5, fmat);
+  fill.position.set(c.cx, 3.72, TR.z0 - 0.09); fill.rotation.y = Math.PI;
+  trainGroup.add(fill);
+  c.bar = fill; c.barMat = fmat; c.barW = bw;
+
+  // coach number
+  const numTex = canvasTex(256, 128, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    g.fillStyle = '#2b3138'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = 'bold 76px "JetBrains Mono",Consolas,monospace';
+    g.fillText('C' + (c.idx + 1), w/2, h/2 + 4);
+  });
+  const nm = plane(1.1, 0.55, new THREE.MeshBasicMaterial({ map:numTex, transparent:true }));
+  nm.position.set(c.cx + 7.65, 3.62, TR.z0 - 0.08); nm.rotation.y = Math.PI;
+  trainGroup.add(nm);
+});
+
+/* front headlights on the leading car */
+for (const hz of [TR.z0 + 1.6, TR.z1 - 1.6]) {
+  const hl = box(0.2, 0.3, 0.7, new THREE.MeshBasicMaterial({ color:'#fff3d0' }), TR.x1 + 0.5, 1.2, hz, trainGroup, false);
+  hl.renderOrder = 1;
+}
+
+/* ------------------------- whole-train fade -------------------------------
+   Sliding off at a hard edge of the fog reads as the train just vanishing,
+   not entering darkness. Instead every material on the train is faded to
+   transparent over the last stretch of the departure slide (and back in
+   over the first stretch of the arrival slide), so it visibly dissolves
+   into the black rather than popping out of the frame still lit up.        */
+const trainMaterials = [];
+trainGroup.traverse(obj => {
+  if (!obj.isMesh) return;
+  const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+  mats.forEach(m => {
+    if (!m || trainMaterials.includes(m)) return;
+    m.transparent = true;
+    m.userData.baseOpacity = m.opacity;
+    trainMaterials.push(m);
+  });
+});
+const trainCoreLights = [trainGlow, ...comps.map(c => c.light)];
+trainCoreLights.forEach(l => { l.userData.baseIntensity = l.intensity; });
+
+function setTrainFade(fade) {
+  for (const m of trainMaterials) m.opacity = m.userData.baseOpacity * fade;
+  for (const l of trainCoreLights) l.intensity = l.userData.baseIntensity * fade;
+}
+
+
+/* ============================ CHARACTER MODELS ============================= */
+/* Real rigged, animated low-poly human for the platform crowd (Quaternius
+   "Man", with a genuine Idle/Walk skeletal animation), cloned per
+   passenger via SkeletonUtils so every clone gets its own independent bone pose and
+   animation state instead of sharing one.                                  */
+const gltfLoader = new GLTFLoader();
+
+async function loadCharacterKit(localPath, cdnPath, idleName, walkName) {
+  let gltf;
+  try { gltf = await gltfLoader.loadAsync(localPath); }
+  catch (e) {
+    try { gltf = await gltfLoader.loadAsync(cdnPath); }
+    catch (e2) {
+      // One missing .glb used to reject Promise.all below, which kills the
+      // whole module — no scene, no console, just the boot spinner sitting
+      // there until the 30s timeout claims the feed is unavailable. A crowd
+      // model is not worth the entire Twin, so a failure here is reported
+      // and skipped; spawnCharacter() falls back to a plain figure if every
+      // model is gone.
+      console.warn(`[metropulse] character model unavailable: ${localPath}`, e2);
+      return null;
+    }
+  }
+
+  const root = gltf.scene;
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    // this model splits into several material sub-meshes per clone, so a
+    // shadow-casting pass on every one of them (× dozens of crowd figures)
+    // is the main cost here — skip it, the platform's own lighting/LED
+    // glow already sells the ground contact without it
+    o.castShadow = false; o.receiveShadow = false;
+    o.frustumCulled = false;   // cheap insurance against a mispositioned root bound
+  });
+
+  const box = new THREE.Box3().setFromObject(root);
+  const scale = 1.78 / Math.max(0.5, box.max.y - box.min.y);   // normalize to ~1.78m tall
+
+  const find = name => gltf.animations.find(c => c.name === name) || gltf.animations[0];
+  return { root, scale, idleClip: find(idleName), walkClip: find(walkName) };
+}
+
+const CHARACTER_KITS = (await Promise.all([
+  loadCharacterKit('models/Man.glb',    'models/Man.glb',    'HumanArmature|Man_Idle',  'HumanArmature|Man_Walk'),
+  loadCharacterKit('models/Woman1.glb', 'models/Woman1.glb', 'CharacterArmature|Idle',  'CharacterArmature|Walk'),
+  loadCharacterKit('models/Woman2.glb', 'models/Woman2.glb', 'CharacterArmature|Idle',  'CharacterArmature|Walk'),
+  loadCharacterKit('models/Casual.glb', 'models/Casual.glb', 'CharacterArmature|Idle',  'CharacterArmature|Walk'),
+  loadCharacterKit('models/Hoodie.glb', 'models/Hoodie.glb', 'CharacterArmature|Idle',  'CharacterArmature|Walk')
+])).filter(Boolean);
+
+if (!CHARACTER_KITS.length) {
+  console.warn('[metropulse] no character models loaded — using untextured stand-in figures');
+}
+
+/* Stand-in body for when models/ is missing entirely. Deliberately crude:
+   it exists so the pipeline, the LEDs and the compartment maths stay
+   demonstrable on a machine that can't load the crowd assets, not to look
+   good. Presents the same interface spawnCharacter() returns, so nothing
+   downstream has to know which kind of figure it got.                      */
+const SIMPLE_GEO = {
+  body: new THREE.CapsuleGeometry(0.24, 0.86, 4, 8),
+  head: new THREE.SphereGeometry(0.16, 10, 8)
+};
+const NO_ANIM = { reset(){ return this; }, play(){ return this; },
+                  crossFadeFrom(){ return this; }, timeScale:1 };
+
+function spawnSimpleFigure() {
+  const root = new THREE.Group();
+  const m = new THREE.MeshStandardMaterial({
+    color: new THREE.Color().setHSL(Math.random(), 0.45, 0.5),
+    roughness:0.8, transparent:true
+  });
+  const body = new THREE.Mesh(SIMPLE_GEO.body, m);
+  body.position.y = 0.86;
+  const head = new THREE.Mesh(SIMPLE_GEO.head, m);
+  head.position.y = 1.56;
+  root.add(body, head);
+  scene.add(root);
+  return { root, mixer:{ update(){}, stopAllAction(){} },
+           idleAction:NO_ANIM, walkAction:NO_ANIM, current:NO_ANIM,
+           facing:Math.atan2(rnd(-0.35, 0.35), 1), meshes:[body, head] };
+}
+
+// skip tinting anything that's skin/eyes/hair — only clothing gets recoloured
+const SKIN_LIKE = /skin|eye|hair|brow/i;
+
+/* Outfit variety used to mean cloning every material on every character, so a
+   full platform carried hundreds of one-off materials (measured: 649 textures
+   for 66 figures) and every one of them was a separate shader binding to sort
+   and draw. Instead each kit gets a small fixed set of pre-tinted variants,
+   built once, and a character picks one. Same visual variety, a bounded number
+   of materials however big the crowd gets.
+
+   And now one DRAW CALL per character rather than nine. These models arrive
+   split into a sub-mesh per material — body, skin, hair, feet, legs, and three
+   unused hair options — and three.js draws each of those separately, so a
+   platform of 27 figures plus 15 in the coaches was issuing 252 skinned draw
+   calls out of the scene's 402. Measured on this scene: a plain render of it
+   cost 19.6ms, and the crowd was ~62% of the calls in it.
+
+   They merge cleanly because of how the kit is rigged: all nine sub-meshes
+   carry the same bones in the same order and the same bind matrix (verified,
+   not assumed — nine distinct Skeleton objects wrapping one identical bone
+   array), so their skinIndex values are directly interchangeable. And nothing
+   in the kit is textured at all — every material is a flat colour — so the
+   only thing a per-sub-mesh material was buying is a colour, which bakes into
+   a vertex attribute for free. One merged geometry, one material, one call.
+
+   The cost is that opacity is per-variant rather than per-character, so fading
+   is done on the object rather than the material — see updateCharacters. */
+const OUTFIT_VARIANTS = 6;
+// every sub-mesh in these kits carries exactly these; anything else a future
+// model brings along is dropped, because mergeGeometries refuses a set of
+// geometries whose attributes don't line up
+const MERGE_ATTRS = ['position', 'normal', 'skinIndex', 'skinWeight'];
+
+/* One variant: a single merged skinned geometry with per-vertex colour baked
+   in, plus the one material that draws it. Returns null if this kit can't be
+   merged, and spawnCharacter falls back to the original nine-mesh clone. */
+function buildMergedVariant(kit, tint) {
+  const geoms = [];
+  let ok = true;
+  // The one material's surface response is copied off the kit's own rather
+  // than invented. These models come out of glTF at roughness 0.27 /
+  // metalness 0.4, and with the room-environment probe in this scene that
+  // sheen is most of what gives the clothing its depth — guessing a matte
+  // 0.78/0.0 instead rendered the whole crowd pale and washed out. Every
+  // sub-mesh in a kit shares these values, so the first one speaks for all.
+  let surface = null;
+  kit.root.traverse(o => {
+    if (!o.isSkinnedMesh || !ok) return;
+    if (!surface) surface = o.material;
+    const src = o.geometry;
+    if (!MERGE_ATTRS.every(a => src.attributes[a])) { ok = false; return; }
+
+    const g = new THREE.BufferGeometry();
+    g.setIndex(src.index);
+    for (const a of MERGE_ATTRS) g.setAttribute(a, src.attributes[a]);
+
+    // the sub-mesh's flat material colour, tinted if it's clothing rather than
+    // skin/hair/eyes, written once per vertex
+    const col = o.material.color.clone();
+    if (!SKIN_LIKE.test(o.material.name || '')) col.lerp(tint, 0.5);
+    const n = src.attributes.position.count;
+    const colors = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { colors[i*3] = col.r; colors[i*3+1] = col.g; colors[i*3+2] = col.b; }
+    g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    geoms.push(g);
+  });
+
+  if (!ok || geoms.length === 0 || !surface) return null;
+  const merged = mergeGeometries(geoms, false);
+  if (!merged) return null;
+
+  return {
+    geometry: merged,
+    // white base colour, because the vertex colours carry the whole palette
+    // (three.js multiplies the two, and both are in linear space already)
+    material: new THREE.MeshStandardMaterial({
+      color: 0xffffff, vertexColors: true, transparent: true,
+      roughness: surface.roughness, metalness: surface.metalness,
+      envMapIntensity: surface.envMapIntensity, flatShading: surface.flatShading,
+      side: surface.side
+    })
+  };
+}
+
+function buildVariants(kit) {
+  const sets = [];
+  for (let v = 0; v < OUTFIT_VARIANTS; v++) {
+    let hue = Math.random();
+    if (hue > 0.02 && hue < 0.15) hue = (hue + 0.3) % 1;   // dodge the skin-tone band
+    const tint = new THREE.Color().setHSL(hue, 0.55, 0.4 + Math.random() * 0.2);
+
+    const merged = buildMergedVariant(kit, tint);
+    if (merged) { sets.push(merged); continue; }
+
+    // fallback: the original one-material-per-sub-mesh set, for a model whose
+    // sub-meshes don't share an attribute layout
+    const byName = new Map();
+    kit.root.traverse(o => {
+      if (!o.isMesh || byName.has(o.material.uuid)) return;
+      const m = o.material.clone();
+      m.transparent = true;
+      if (!SKIN_LIKE.test(m.name || '')) m.color.lerp(tint, 0.5);
+      byName.set(o.material.uuid, m);
+    });
+    sets.push({ perMaterial: byName });
+  }
+  if (sets.some(v => v.geometry)) {
+    console.info(`[metropulse] ${kit.root.name || 'kit'}: merged to 1 draw call per figure`);
+  }
+  return sets;
+}
+
+for (const kit of CHARACTER_KITS) kit.variants = buildVariants(kit);
+
+/* One independent animated clone, ready to drop into the scene. */
+function spawnCharacter() {
+  if (!CHARACTER_KITS.length) return spawnSimpleFigure();
+  const kit = CHARACTER_KITS[Math.floor(Math.random() * CHARACTER_KITS.length)];
+  const root = cloneSkinned(kit.root);
+  root.scale.setScalar(kit.scale * rnd(0.94, 1.06));
+
+  const variant = kit.variants[Math.floor(Math.random() * kit.variants.length)];
+  // meshes cached once here so per-frame work loops a flat array rather than
+  // walking the hierarchy with traverse()
+  const meshes = [];
+
+  if (variant.geometry) {
+    // Swap this clone's nine sub-meshes for one mesh on the merged geometry,
+    // bound to the same cloned skeleton. The clone still has to be a real
+    // SkeletonUtils clone — the bones are what make each figure's pose
+    // independent — it just doesn't need nine meshes hanging off them.
+    const originals = [];
+    let skeleton = null, bindMatrix = null;
+    root.traverse(o => {
+      if (!o.isSkinnedMesh) return;
+      if (!skeleton) { skeleton = o.skeleton; bindMatrix = o.bindMatrix; }
+      originals.push(o);
+    });
+    for (const o of originals) o.removeFromParent();
+
+    const body = new THREE.SkinnedMesh(variant.geometry, variant.material);
+    body.castShadow = false; body.receiveShadow = false;
+    body.frustumCulled = false;   // same insurance as the kit's own meshes
+    // Parent is not load-bearing: for an attached-bind skinned mesh the
+    // renderer cancels the mesh's own world matrix against the world-space
+    // bone matrices, so the pose comes entirely from the bones under `root`.
+    root.add(body);
+    body.bind(skeleton, bindMatrix);
+    meshes.push(body);
+  } else {
+    root.traverse(o => {
+      if (!o.isMesh) return;
+      const shared = variant.perMaterial.get(o.material.uuid);
+      if (shared) o.material = shared;
+      meshes.push(o);
+    });
+  }
+
+  const mixer = new THREE.AnimationMixer(root);
+  const idleAction = mixer.clipAction(kit.idleClip);
+  const walkAction = mixer.clipAction(kit.walkClip);
+  idleAction.play();
+
+  scene.add(root);
+  // idle facing points toward the train (+Z in this layout), same convention
+  // as the movement-facing formula below, with a little natural variation
+  return { root, mixer, idleAction, walkAction, current:idleAction,
+           facing:Math.atan2(rnd(-0.35, 0.35), 1), meshes, shared:true };
+}
+
+function despawnCharacter(c) {
+  if (!c) return;
+  scene.remove(c.root);
+  c.mixer.stopAllAction();
+  // shared-variant materials outlive the character that borrowed them;
+  // disposing here would blank every other figure using the same variant
+  if (!c.shared) for (const o of c.meshes) o.material.dispose();
+}
+
+function setCharAnim(c, moving) {
+  const target = moving ? c.walkAction : c.idleAction;
+  if (c.current === target) return;
+  target.reset().play();
+  target.crossFadeFrom(c.current, 0.3, true);
+  c.current = target;
+}
+
+/* Half the crowd's animation is advanced on each frame, at double dt, rather
+   than all of it on every frame. Each clone's AnimationMixer walks its entire
+   bone hierarchy on the CPU and then pushes a new bone matrix texture, and
+   with a full platform plus three loaded coaches that is the largest
+   per-frame cost in the scene after the render itself. Splitting the work
+   across two frames halves it; the animation clock still advances at exactly
+   the same rate, so nothing runs in slow motion, and at any playable frame
+   rate a background walk cycle updating at half rate is not something you can
+   see. `animPhase` flips once per frame and each figure claims one parity. */
+let animPhase = 0;
+
+/* Sync every agent's clone to its simulation state — called once per frame,
+   alongside (not inside) the coach-packing instanced draw below.           */
+function updateCharacters(dt) {
+  animPhase ^= 1;
+  for (const a of agents) {
+    const c = a.char;
+    if (!c) continue;
+    if ((a.id & 1) === animPhase) c.mixer.update(dt * 2);
+
+    const moving = Math.hypot(a.vx, a.vz) > 0.25;
+    setCharAnim(c, moving);
+    // stride length scales with speed so the feet don't skate — the divisor is
+    // the speed the clip was authored at, and the ceiling is raised because
+    // the walks above now run well past the old 2.6x cap
+    c.walkAction.timeScale = clamp(a.speed / 3.0, 0.6, 3.4);
+
+    const yaw = moving ? Math.atan2(a.vx, a.vz) : c.facing;
+    c.root.rotation.y += ((yaw - c.root.rotation.y + Math.PI * 3) % (Math.PI * 2) - Math.PI) * Math.min(1, dt * 8);
+    // the coach floor sits above the platform, so anyone past the door
+    // threshold stands on it — pinning every figure to y=0 buried the ones
+    // who boarded (and the ones stepping off) shin-deep in the floor
+    const floorY = a.z > TR.z0 + 0.2 ? TRAIN_FLOOR_Y : 0;
+    a.y = a.y === undefined ? floorY : a.y + (floorY - a.y) * Math.min(1, dt * 9);
+    c.root.position.set(a.x, a.y, a.z);
+
+    // per-object, because the material is shared with other characters
+    const op = a.fade;
+    if (c.shared) { c.root.visible = op > 0.05; }
+    else for (const o of c.meshes) o.material.opacity = op;
+  }
+}
+
+/* --------------------------- queue formation ------------------------------
+   Waiting passengers don't scatter — the LED strip tells them where to stand,
+   so each zone gets one queue block, centred behind its single coach door.
+   Slots are ordered front-centre first, so a queue visibly grows backwards.  */
+const QUEUE_Z = L.ledZ0 - 0.55;   // front of the queue, just clear of the strip
+zones.forEach(z => {
+  const list = [];
+  const doorX = z.cx + TR.doorOffsets[0];
+  for (let d = 0; d < 9; d++) {             // depth of the line
+    for (let c = 0; c < 6; c++) {           // width of the line
+      list.push({
+        x: doorX + (c - 2.5) * 0.86 + rnd(-0.11, 0.11),
+        z: QUEUE_Z - d * 0.96 + rnd(-0.11, 0.11),
+        order: d * 10 + Math.abs(c - 2.5) + Math.random() * 0.4
+      });
+    }
+  }
+  list.sort((a, b) => a.order - b.order);
+  z.slots = list;
+  z.freeSlots = list.map((_, i) => i);
+});
+
+function takeSlot(z) {
+  if (!z.freeSlots.length) return { x:z.cx + rnd(-7, 7), z:rnd(L.restZ0, L.restZ1), idx:-1 };
+  const i = z.freeSlots.shift();
+  return { ...z.slots[i], idx:i };
+}
+function giveSlot(z, idx) { if (idx >= 0) z.freeSlots.unshift(idx); }
+
+/* ------------------------------ agents ----------------------------------- */
+
+let agentId = 0;
+function makeAgent(zone, atEntrance) {
+  const slot = takeSlot(zone);
+  const a = {
+    id:agentId++, zone,
+    x: atEntrance ? L.entrance.x + rnd(-1.2, 1.2) : slot.x,
+    z: atEntrance ? L.entrance.z + rnd(-1.0, 1.0) : slot.z,
+    tx:slot.x, tz:slot.z, slot:slot.idx,
+    state: atEntrance ? 'ENTER' : 'IDLE',
+    // Brisk. The entrance sits at the far end of the concourse from coach 3's
+    // doors — about 48m across this layout — so at the previous 3.2-4.2 m/s an
+    // arrival heading for the far coach spent 12-15 seconds walking, which is
+    // longer than a whole dwell: people were still crossing the floor when the
+    // train wanted to leave. Fast enough that a batch is on the platform
+    // within a few seconds, still slow enough that you watch them arrive.
+    speed: atEntrance ? rnd(5.6, 7.0) : rnd(4.0, 5.2),
+    scale: rnd(0.9, 1.09),
+    phase: rnd(0, 6.28),
+    fade: atEntrance ? 1 : 0,
+    fadeDir: 1,
+    wp: null, comp:null, vx:0, vz:0, char:null
+  };
+  a.char = spawnCharacter();
+  zone.agents.push(a);
+  agents.push(a);
+  return a;
+}
+
+/* A passenger stepping off the train: belongs to no zone, walks to the exit. */
+function makeAlighter(comp, doorX) {
+  const a = {
+    id:agentId++, zone:null,
+    x: doorX + rnd(-0.5, 0.5), z: TR.z0 + rnd(0.4, 1.4),
+    tx:0, tz:0, slot:-1,
+    state:'ALIGHT',
+    speed: rnd(4.8, 6.0),
+    scale: rnd(0.9, 1.09),
+    phase: rnd(0, 6.28),
+    fade:1, fadeDir:1,
+    wp: [
+      { x: doorX + rnd(-1.2, 1.2), z: L.safeZ - 1.4 },
+      { x: L.exit.x + rnd(-1.5, 1.5), z: L.exit.z + rnd(-0.8, 0.8) }
+    ],
+    comp, vx:0, vz:0, char:null
+  };
+  a.char = spawnCharacter();
+  agents.push(a);
+  return a;
+}
+
+function removeAgent(a) {
+  if (a.zone) {
+    giveSlot(a.zone, a.slot);
+    const i = a.zone.agents.indexOf(a); if (i >= 0) a.zone.agents.splice(i, 1);
+  }
+  despawnCharacter(a.char);
+  const j = agents.indexOf(a); if (j >= 0) agents.splice(j, 1);
+}
+
+/* --------------------- weighted distribution (core logic) ----------------- */
+/* This is the redistribution itself. Each arrival is placed one at a time and
+   the weight is (room left in that compartment)^2, recomputed after every
+   single placement — so a queue that is filling up stops attracting people
+   before it is actually full, and the crowd spreads instead of piling onto
+   whichever coach happened to look best when the batch started.
+
+   "Room left" is measured against the projected load the LED is showing them
+   (already aboard + already queued here), not against platform floor space:
+   somebody choosing where to stand cares about how full the coach will be
+   when they are in it, and the strip in front of them is displaying exactly
+   that. Squaring sharpens the preference without making it deterministic —
+   real crowds don't all pick the single best option, they lean toward it.  */
+function pickZone() {
+  const w = zones.map((z, i) => Math.pow(Math.max(0, CFG.compCapacity - compLoad(i)), 2));
+  const total = w.reduce((a, b) => a + b, 0);
+  if (total <= 0) {                       // every coach projected full — least-bad wins
+    return zones[bestCoach()];
+  }
+  let r = Math.random() * total;
+  for (let i = 0; i < zones.length; i++) { r -= w[i]; if (r <= 0) return zones[i]; }
+  return zones[zones.length - 1];
+}
+
+/* Queue `n` arrivals, staggered so they trickle through the entrance instead
+   of materialising at once.
+     zone   — null lets pickZone() choose (the LED-guided path); a specific
+              zone forces it, which is what live data does, since MQTT has
+              already told us how many people are at each coach's doors.
+     credit — false means "draw this person, but don't add them to the count":
+              live telemetry owns z.count, so crediting again would
+              double-count every arrival it reports.                        */
+function queueArrivals(n, zone = null, credit = true) {
+  const start = simTime + 0.05;
+  const base = Math.max(start, pendingSpawns.length ? pendingSpawns[pendingSpawns.length - 1].at : start);
+  for (let i = 0; i < n; i++) pendingSpawns.push({ at: base + (i + 1) * CFG.spawnStagger, zone, credit });
+}
+
+/* How many arrivals are still queued for a zone but haven't walked in yet —
+   reconcile() has to know, or it will pop in duplicates of people who are
+   already on their way through the entrance. */
+function pendingFor(z) {
+  let n = 0;
+  for (const p of pendingSpawns) if (p.zone === z) n++;
+  return n;
+}
+
+function spawnOne(zone = null, credit = true) {
+  const z = zone || pickZone();
+  if (credit) {
+    z.count++;
+    run.stats.spawned++;
+  }
+  // shadow tally: where this same arrival would have landed with a plain
+  // uniform random pick, i.e. no LED guidance at all — the "before" baseline
+  stationBefore[irnd(0, zones.length - 1)]++;
+  if (activeIn(z).length < CFG.renderCap) makeAgent(z, true);
+  refreshAllZones();
+  return z;
+}
+
+/* --------------------- LED-guided queue rebalancing ----------------------
+   "Stand where it's green": people keep watching the strips while they wait
+   and drift out of a queue for a full coach into one for an emptier one.
+   The comparison is on projected compartment load, same as the strips they
+   are reading — a short queue for an already-packed coach is worth leaving,
+   and a long queue for an empty one isn't.                                  */
+function rebalanceQueues() {
+  let hi = zones[0], lo = zones[0];
+  for (const z of zones) {
+    if (compLoad(z.idx) > compLoad(hi.idx)) hi = z;
+    if (compLoad(z.idx) < compLoad(lo.idx)) lo = z;
+  }
+  const gap = compLoad(hi.idx) - compLoad(lo.idx);
+  // nobody actually queued at the busy coach means the imbalance is all
+  // onboard load, which walking down the platform cannot fix
+  if (hi === lo || gap < 6 || hi.count <= 0 || hi.status === 'low') return 0;
+
+  const n = Math.min(2, gap);
+  let moved = 0;
+  for (let k = 0; k < n; k++) {
+    const pool = activeIn(hi);
+    if (!pool.length || hi.count <= 0) break;
+    // whoever is furthest back in the red queue is the one who wanders off
+    pool.sort((a, b) => a.z - b.z);
+    const a = pool[0];
+    giveSlot(hi, a.slot);
+    hi.agents.splice(hi.agents.indexOf(a), 1);
+    hi.count--;
+
+    const slot = takeSlot(lo);
+    a.zone = lo; a.slot = slot.idx; a.tx = slot.x; a.tz = slot.z;
+    a.state = 'ENTER'; a.speed = rnd(3.4, 4.4);   // a drift down the platform, not a dash
+    lo.agents.push(a);
+    lo.count++;
+    moved++;
+  }
+  if (moved) refreshAllZones();
+  return moved ? { from:hi.name, to:lo.name, n:moved } : 0;
+}
+
+/* ------------------------------ alighting -------------------------------- */
+/* At every stop but the first, some of the people on board get off. At the
+   terminus everybody does.                                                  */
+function alightAt(stationIdx) {
+  const last = isTerminus(stationIdx);
+  const parts = [];
+  let total = 0;
+
+  comps.forEach(c => {
+    if (c.boarded <= 0) { parts.push(`C${c.idx+1}:0`); return; }
+    const n = last ? c.boarded
+                   : Math.max(1, Math.round(c.boarded * rnd(CFG.alightMin, CFG.alightMax)));
+    // live, the exits are already in the occupancy the gate counter reports,
+    // so this only puts figures on the platform — it doesn't move the tally
+    if (!pipeline.active) {
+      c.boarded  = Math.max(0, c.boarded - n);
+      c.boardedF = c.boarded;
+    }
+    total += n;
+
+    // render a representative sample of them stepping onto the platform,
+    // spread a little across the one door's width so they don't overlap
+    const nFig = Math.min(n, 14);
+    for (let k = 0; k < nFig; k++) {
+      const spread = nFig > 1 ? (k / (nFig - 1) - 0.5) * (TR.doorW - 0.8) : 0;
+      makeAlighter(c, c.cx + TR.doorOffsets[0] + spread + train.x);
+    }
+    parts.push(`C${c.idx+1}:${n}`);
+  });
+
+  run.stats.alighted += total;
+  // coaches just emptied out — the strips advertise the new projected loads
+  if (total) refreshAllZones();
+  if (total) logLine('al', `${last ? 'TERMINUS — ALL OFF' : 'ALIGHTING'}  ${total}  [${parts.join('  ')}]`);
+  return total;
+}
+
+/* Everyone still waiting stays behind at the stop we just left. */
+function clearPlatform(reason) {
+  const left = zones.reduce((s, z) => s + z.count, 0);
+  pendingSpawns.length = 0;
+  for (let i = agents.length - 1; i >= 0; i--) {
+    const a = agents[i];
+    if (a.state === 'IDLE' || a.state === 'ENTER' || a.state === 'FADE') removeAgent(a);
+  }
+  zones.forEach(z => {
+    z.count = 0; z.hist.length = 0; z.trend = 'steady';
+    z.freeSlots = z.slots.map((_, i) => i);
+  });
+  refreshAllZones();
+  run.stats.left += left;
+  if (left) logLine('sy', `${left} LEFT BEHIND AT ${stationName(run.station).toUpperCase()} ${reason || ''}`.trim());
+  syncSliders();
+  return left;
+}
+
+/* ------------------ keep rendered figures ≈ true occupancy ---------------- */
+/* "Active" = figures that count toward the zone's rendered population:
+   waiting or walking in, but not already boarding and not fading out.       */
+const activeIn = z => z.agents.filter(a => a.state === 'IDLE' || a.state === 'ENTER');
+
+function reconcile(zone, budget) {
+  const onPlat = activeIn(zone);
+  const target = Math.min(zone.count, CFG.renderCap);
+  // people already walking in through the entrance count toward the target —
+  // without this, reconcile pops in a duplicate for every arrival that is
+  // still crossing the concourse, then fades half of them back out
+  let diff = target - onPlat.length - pendingFor(zone), moved = 0;
+  while (diff > 0 && moved < budget) {
+    const a = makeAgent(zone, false);
+    a.fade = 0; a.fadeDir = 1;
+    diff--; moved++;
+  }
+  while (diff < 0 && moved < budget) {
+    const pool = activeIn(zone);
+    if (!pool.length) break;
+    const a = pool[irnd(0, pool.length - 1)];
+    a.state = 'FADE'; a.fadeDir = -1;
+    diff++; moved++;
+  }
+}
+
+/* Manual/instant set — the slider and the scenario buttons. Figures appear
+   and disappear in place, which is what you want when you're dragging a
+   slider to a number. */
+function setZoneCount(z, n, quiet) {
+  z.count = Math.max(0, Math.round(n));
+  reconcile(z, 999);
+  refreshAllZones();
+  if (!quiet) syncSliders();
+}
+
+/* Live set — a new reading from the perception pipeline for this coach's
+   doors. Same destination as setZoneCount, but people ARRIVE: an increase
+   walks the difference in through the entrance one at a time so the platform
+   visibly fills from the concourse, and a decrease is left to reconcile()'s
+   fade-out on the next tick. Popping bodies into queue slots the instant a
+   telemetry message lands is what made live mode look like a spreadsheet
+   rather than a station.                                                    */
+function setZoneQueueLive(z, n) {
+  n = Math.max(0, Math.round(n));
+  const delta = n - z.count;
+  z.count = n;
+
+  if (delta > 0) {
+    // only walk in as many as we'd actually draw — beyond renderCap the
+    // count is still true, there's just no figure for it
+    const room = CFG.renderCap - activeIn(z).length - pendingFor(z);
+    const walkers = clamp(delta, 0, Math.max(0, room));
+    if (walkers > 0) queueArrivals(walkers, z, false);
+  }
+  refreshAllZones();
+}
+
+/* Platform density on its own — kept because the decision engine speaks in
+   it and the console still reports it, but it is NOT what drives the LEDs. */
+function statusOf(n) { return n <= CFG.thrLow ? 'low' : n <= CFG.thrMed ? 'med' : 'high'; }
+
+/* ---------------------- projected compartment load ------------------------
+   The number the whole system exists to publish. `boarded` is who is already
+   in that compartment (real, from compartment/occupancy over MQTT when live);
+   `count` is who is queued at its doors on this platform and about to squeeze
+   in. Their sum against the coach's capacity is what a passenger deciding
+   where to stand actually needs, and it is what the platform LED shows.    */
+function compLoad(i) { return comps[i].boarded + zones[i].count; }
+
+function loadStatus(n) {
+  const frac = n / CFG.compCapacity;
+  return frac >= CFG.compHighFrac ? 'high' : frac >= CFG.compMedFrac ? 'med' : 'low';
+}
+
+/* Which coach to send the next passenger to: lowest projected load, ties
+   broken toward the emptier compartment so the advice stays stable rather
+   than flapping between two equally-loaded coaches. */
+function bestCoach() {
+  let best = 0;
+  for (let i = 1; i < comps.length; i++) {
+    const d = compLoad(i) - compLoad(best);
+    if (d < 0 || (d === 0 && comps[i].boarded < comps[best].boarded)) best = i;
+  }
+  return best;
+}
+
+function refreshZone(z) {
+  z.load = compLoad(z.idx);
+  // When live, the decision engine has already made this call and the virtual
+  // ESP32 is acting on it — the Twin renders that verdict rather than
+  // recomputing one that could disagree for a frame or two while the
+  // occupancy and telemetry messages land out of step. Offline, there's no
+  // engine, so the same rule runs here.
+  z.status = z.liveStatus || loadStatus(z.load);
+  z.platStatus = statusOf(z.count);       // density reading, for the console only
+  paintLed(z);
+  paintZoneSprite(z);
+  uiDirty = true;
+}
+
+/* A compartment's own load moved (someone boarded, or MQTT reported new
+   occupancy) — every zone's advice depends on every other zone's load via
+   bestCoach(), so they all repaint together. */
+function refreshAllZones() { zones.forEach(refreshZone); }
+
+/* =============================== BOARDING ================================= */
+function startBoarding(manual) {
+  if (train.state !== 'DOCKED') return;
+  train.state = 'BOARDING';
+  train.boardingWatchdog = 0;
+  train.boardingHeldLogged = false;
+
+  // Arrivals are staggered through the entrance, so at the moment the doors
+  // are assigned some of this station's crowd may not exist as figures yet.
+  // They were being dropped on the floor by clearPlatform() at departure —
+  // counted as boarded, never drawn boarding. Spawn them now so they are real
+  // agents that the walk below can pick up and the train can wait for.
+  while (pendingSpawns.length) {
+    const pending = pendingSpawns.shift();
+    spawnOne(pending.zone, pending.credit);
+  }
+
+  const parts = [];
+  zones.forEach((z, i) => {
+    const c = comps[i];
+    stationAfter[i] = 0;
+    if (z.count <= 0) { parts.push(`${z.id}:0`); return; }
+
+    // everyone waiting tries to board — the coach's free room is the only
+    // real limit. People are only left behind once the coach is actually full.
+    const free   = Math.max(0, CFG.compCapacity - c.boarded);
+    const nBoard = Math.min(z.count, free);
+    stationAfter[i] = nBoard;   // "after guidance" — actual boarding count
+
+    if (nBoard <= 0) {
+      parts.push(`${z.id}:0`);
+      return;
+    }
+
+    const before = z.count;
+    const onPlat = activeIn(z);
+    if (!onPlat.length) { parts.push(`${z.id}:0`); return; }
+
+    // rendered figures board in proportion to the true number leaving
+    const nRender = Math.min(onPlat.length, Math.max(1, Math.round(nBoard * onPlat.length / before)));
+
+    // the platform empties now; the coach fills as the figures actually arrive
+    z.count = Math.max(0, z.count - nBoard);
+    c.pending += nBoard;
+    c.perFigure = nBoard / nRender;
+
+    // pick the walkers: nearest to the doors go first, with some noise
+    onPlat.sort((a, b) => (b.z + rnd(-3, 3)) - (a.z + rnd(-3, 3)));
+    for (let k = 0; k < nRender; k++) {
+      const a = onPlat[k];
+      giveSlot(z, a.slot); a.slot = -1;
+      a.state = 'BOARD';
+      a.comp = c;
+      const door = c.cx + TR.doorOffsets[0] + rnd(-1.4, 1.4);
+      a.wp = [
+        { x:door, z: L.safeZ - 0.4 + rnd(-0.3, 0.3) },
+        { x:door, z: TR.z0 + 0.9 }
+      ];
+      // Boarding is the one walk the train is actually waiting on (see the
+      // BOARDING case in updateTrain — the doors now stay open until every
+      // one of these figures is inside), so this is the fastest of the walks:
+      // people hurrying for a train that is about to leave.
+      a.speed = rnd(5.4, 6.8);
+    }
+    parts.push(`${z.id}:${nBoard}`);
+  });
+  refreshAllZones();
+
+  const total = parts.reduce((s, p) => s + parseInt(p.split(':')[1], 10), 0);
+  run.stats.boarded += total;
+  logLine('bd', `BOARDING  +${total}  [${parts.join('  ')}]`);
+  uiDirty = true;
+}
+
+function boardingDone() {
+  return !agents.some(a => a.state === 'BOARD');
+}
+
+/* Someone who reaches the platform after the doors were assigned — a figure
+   still crossing the concourse when boarding began, or a batch the operator
+   sent mid-dwell — is put on the train too, as long as their coach has room.
+   The doors are open and the service is already holding for the people ahead
+   of them, so leaving them standing at an open door would be the odd
+   behaviour. Offline this credits the coach exactly as startBoarding() does;
+   live, MQTT owns the tally and the walk is animation only.                */
+function sweepLateBoarders() {
+  for (const z of zones) {
+    const c = comps[z.idx];
+    for (const a of activeIn(z)) {
+      if (compLoad(z.idx) >= CFG.compCapacity) break;   // genuinely full — they wait for the next one
+      if (z.count > 0) { z.count--; c.pending++; stationAfter[z.idx]++; }
+      giveSlot(z, a.slot); a.slot = -1;
+      a.state = 'BOARD';
+      a.comp = c;
+      const door = c.cx + TR.doorOffsets[0] + rnd(-1.4, 1.4);
+      a.wp = [
+        { x:door, z: L.safeZ - 0.4 + rnd(-0.3, 0.3) },
+        { x:door, z: TR.z0 + 0.9 }
+      ];
+      a.speed = rnd(5.4, 6.8);
+    }
+  }
+  refreshAllZones();
+}
+function alightingDone() {
+  return !agents.some(a => a.state === 'ALIGHT');
+}
+/* True while anyone from the current/pending inflow hasn't reached the
+   platform yet — a batch still trickling in (staggered spawns) or still
+   walking in from the entrance. The auto-dwell timer holds off while this
+   is true, so a batch you just sent isn't stranded by a premature departure. */
+function anyEntering() {
+  return pendingSpawns.length > 0 || agents.some(a => a.state === 'ENTER');
+}
+
+/* ============================ GUIDANCE METRICS ============================= */
+/* Turns the before/after tallies into the boarding-summary banner. Nothing
+   here is fabricated: `balanceScore` is a coefficient-of-variation read on
+   the actual per-coach counts, and `waitProxy` is the size-biased expected
+   coach load (mean + variance/mean) — the expected crowd size experienced by
+   a randomly sampled passenger, which grows with imbalance even when the
+   total headcount is identical. Lower imbalance -> lower expected wait.     */
+function balanceScore(arr) {
+  const total = arr.reduce((a, b) => a + b, 0);
+  if (total <= 0) return 100;
+  const mean = total / arr.length;
+  const variance = arr.reduce((s, v) => s + (v - mean) ** 2, 0) / arr.length;
+  const cv = mean > 0 ? Math.sqrt(variance) / mean : 0;
+  return clamp(Math.round((1 - Math.min(cv, 1)) * 100), 0, 100);
+}
+
+function waitProxy(arr) {
+  const total = arr.reduce((a, b) => a + b, 0);
+  if (total <= 0) return 0;
+  return arr.reduce((s, v) => s + v * v, 0) / total;
+}
+
+function coachLine(arr) {
+  return comps.map((c, i) => `C${i + 1} ${arr[i]}`).join('   ');
+}
+
+function boardingSummaryText() {
+  const before = stationBefore, after = stationAfter;
+  const balBefore = balanceScore(before), balAfter = balanceScore(after);
+  const balDelta  = clamp(balAfter - balBefore, 0, 100);
+  const waitBefore = waitProxy(before), waitAfter = waitProxy(after);
+  const waitPct  = waitBefore > 0 ? Math.round((waitBefore - waitAfter) / waitBefore * 100) : 0;
+  const arrow    = waitPct >= 0 ? '↓' : '↑';
+
+  return [
+    'BEFORE GUIDANCE', coachLine(before), '',
+    'AFTER GUIDANCE',  coachLine(after),  '',
+    `BALANCE IMPROVED  +${balDelta}%`,
+    `AVG WAIT  ${arrow}${Math.abs(waitPct)}%`
+  ].join('\n');
+}
+
+/* Live, there is no "before" to compare against. The platform split comes
+   out of the camera — the MCNN read where people actually stood, and whether
+   they stood there because of the LEDs is not something the footage can tell
+   us. Running the before/after comparison anyway would be inventing a
+   guidance effect out of a uniform random draw, so live mode reports what is
+   actually observable instead: where the crowd boarded, what the system was
+   recommending at the time, and where that leaves each coach. */
+function liveBoardingSummaryText() {
+  const best = bestCoach();
+  return [
+    'BOARDED THIS STOP', coachLine(stationAfter), '',
+    'COACH LOAD NOW', comps.map((c, i) => `C${i + 1} ${compLoad(i)}/${CFG.compCapacity}`).join('   '), '',
+    `RECOMMENDED  ${zones[best].name}`,
+    `BALANCE  ${balanceScore(stationAfter)}%`
+  ].join('\n');
+}
+
+function showBoardingSummary() {
+  if (stationAfter.reduce((a, b) => a + b, 0) <= 0) return;   // nobody boarded — nothing to report
+  if (pipeline.active) {
+    banner('BOARDING SUMMARY', liveBoardingSummaryText(), 6);
+    logLine('sy', `BOARDED [${coachLine(stationAfter)}]  ·  BALANCE ${balanceScore(stationAfter)}%`);
+    return;
+  }
+  banner('BOARDING SUMMARY', boardingSummaryText(), 6);
+  const balDelta = clamp(balanceScore(stationAfter) - balanceScore(stationBefore), 0, 100);
+  logLine('sy', `GUIDANCE — BALANCE +${balDelta}%  ·  SEE BANNER FOR FULL SUMMARY`);
+}
+
+/* ============================ RUN CONTROLLER ============================== */
+function emptyTrain() {
+  comps.forEach(c => { c.boarded = 0; c.boardedF = 0; c.pending = 0; c.rendered = 0; c.incoming = 0; c.boardedHere = 0; });
+  updateCompUI();
+}
+
+function startRun() {
+  resetAll(true);
+  run.state = 'RUNNING';
+  run.station = 0;
+  run.t = 0;
+  applyStation();
+
+  train.state = 'ABSENT'; train.timer = 0; train.x = -OFFSCREEN;
+  comps.forEach(c => { c.doorOpen = 0; c.doorTarget = 0; });
+
+  logLine('sy', `RUN STARTED — ${STATIONS.length} STOPS`);
+  logLine('sy', `COACH LIMIT ${CFG.compCapacity} × 3 = ${TRAIN_CAP} SEATS`);
+  logLine('in', `STATION 1 · ${stationName(0).toUpperCase()}`
+              + (pipeline.active ? ' — CROWD FROM THE LIVE FEED' : ' — SEND A BATCH WHEN READY'));
+  uiDirty = true;
+}
+
+function resetAll(quiet) {
+  run.state = 'IDLE';
+  run.station = 0;
+  run.t = 0;
+  run.stats = { spawned:0, boarded:0, alighted:0, left:0 };
+  pipeline.pendingDepart = false;
+  pipeline.clip = null;
+
+  pendingSpawns.length = 0;
+  for (let i = agents.length - 1; i >= 0; i--) removeAgent(agents[i]);
+  zones.forEach(z => {
+    z.count = 0; z.hist.length = 0; z.trend = 'steady';
+    z.freeSlots = z.slots.map((_, i) => i);
+  });
+  emptyTrain();
+  refreshAllZones();   // after emptyTrain(), so the strips read the cleared coaches
+
+  train.state = 'OFF'; train.x = -OFFSCREEN; train.timer = 0; train.dockedElapsed = 0;
+  train.alighting = false;
+  comps.forEach(c => { c.doorOpen = 0; c.doorTarget = 0; });
+
+  applyStation();
+  syncSliders();
+  if (!quiet) logLine('sy', 'RESET — LINE CLEARED, AWAITING START');
+  uiDirty = true;
+}
+
+function finishRun() {
+  run.state = 'COMPLETE';
+  train.state = 'OFF';
+  const s = run.stats;
+  logLine('sy', '── RUN COMPLETE ──');
+  logLine('sy', `CARRIED ${s.alighted}  ·  SPAWNED ${s.spawned}  ·  BOARDED ${s.boarded}`);
+  logLine('sy', `LEFT BEHIND ${s.left}`);
+  banner('RUN COMPLETE', `CARRIED ${s.alighted}   SPAWNED ${s.spawned}\nLEFT BEHIND ${s.left}`, Infinity);
+  syncButtons();
+  uiDirty = true;
+}
+
+/* ------------------- Control Room -> Twin run commands --------------------
+   Two commands, mirroring what an operator actually does: a clip starts
+   playing for the stop the train is sitting at, and later that clip ends.  */
+
+/* A clip has been loaded and is now being processed. If the Twin is idle
+   this is the start of the journey, so bring the train in; if a run is
+   already going the train is already standing at this stop, and the clip is
+   simply the crowd arriving at it. Either way we do NOT depart here.       */
+function noteClipStarted(sourceName) {
+  const label = sourceName ? ` · ${sourceName}` : '';
+  if (run.state !== 'RUNNING') {
+    startRun();                            // clears pipeline.clip, so name it after
+    logLine('in', `CONTROL ROOM — CLIP LOADED${label} — SERVICE INBOUND`);
+  } else {
+    logLine('in', `CONTROL ROOM — CLIP LOADED${label} — HOLDING AT ${stationName(run.station).toUpperCase()}`);
+  }
+  pipeline.clip = sourceName || null;
+  // clear the per-stop boarding figure when a NEW clip starts, not when the
+  // train pulls out — cleared on departure it was wiped in the same breath it
+  // was set, so the number nobody could read was the one that mattered
+  comps.forEach(c => { c.boardedHere = 0; });
+  updateCompUI();
+  banner('CLIP LOADED', sourceName ? sourceName.toUpperCase() : 'PROCESSING PLATFORM FEED', 2.2);
+}
+
+/* The clip finished — close up and run to the next stop. Deliberately
+   tolerant about when it lands: mid-arrival it's remembered and fires on
+   docking, and if the Twin was never started it starts the run first rather
+   than dropping the command. */
+function requestDepart() {
+  if (run.state === 'COMPLETE') { logLine('sy', 'DEPART IGNORED — RUN ALREADY COMPLETE'); return; }
+  if (run.state !== 'RUNNING') {
+    startRun();
+    logLine('sy', 'CONTROL ROOM — DEPART RECEIVED WHILE IDLE, RUN STARTED');
+    return;   // the train still has to arrive at stop 1 before it can leave it
+  }
+  if (isTerminus(run.station)) { logLine('sy', 'DEPART IGNORED — SERVICE TERMINATES HERE'); return; }
+
+  if (train.state === 'DOCKED' && alightingDone()) {
+    pipeline.pendingDepart = false;
+    startBoarding(false);
+    logLine('dp', 'CONTROL ROOM — CLIP ENDED, BOARDING NOW');
+  } else {
+    // still arriving, or people are still stepping off — hold the command
+    pipeline.pendingDepart = true;
+    logLine('sy', `CONTROL ROOM — DEPART QUEUED (TRAIN ${train.state})`);
+  }
+}
+
+/* Move the whole scene's identity to the current stop. */
+function applyStation() {
+  stationBefore = [0, 0, 0];
+  stationAfter  = [0, 0, 0];
+  // the previous stop's batch left with the previous stop's train
+  batchDepart = false;
+  paintStationSigns();
+  document.getElementById('camid').firstChild.nodeValue =
+    `CAM_12_STATION_${STATIONS[run.station].id}`;
+  document.getElementById('panelStation').textContent =
+    `STN ${STATIONS[run.station].id}/${STATIONS.length}`;
+  syncButtons();   // the terminus disables send/depart — re-check on every stop
+}
+
+/* ============================== TRAIN CYCLE =============================== */
+function updateTrain(dt) {
+  const T = train;
+  if (T.state === 'OFF') { T.group.position.x = T.x; setTrainFade(0); T.renderFade = 0; return; }
+
+  T.timer += dt;
+
+  switch (T.state) {
+    case 'DOCKED': {
+      comps.forEach(c => c.doorTarget = 1);
+      T.dockedElapsed += dt;
+      // people get off first
+      if (!T.alighting) {
+        T.alighting = true; T.alightWatchdog = 0;
+        if (run.station > 0) alightAt(run.station);
+      }
+      T.alightWatchdog += dt;
+
+      const alightSettled = alightingDone() || T.alightWatchdog > 12;
+      const clearAlighters = () => {
+        // the watchdogs are safety nets — anyone who somehow never reaches
+        // the exit is treated as settled rather than holding the run hostage
+        for (let i = agents.length - 1; i >= 0; i--)
+          if (agents[i].state === 'ALIGHT') removeAgent(agents[i]);
+      };
+
+      // A batch the operator sent leaves when the last of it is standing on the
+      // platform, not when a countdown expires. dwellMax still backstops it, so
+      // a batch that somehow never finishes arriving can't hold the run.
+      const batchReady = batchDepart
+                         && (!anyEntering() || T.dockedElapsed > CFG.dwellMax);
+
+      if (isTerminus(run.station)) {
+        // end of the line: nobody boards, we just wait for the platform to clear
+        if ((alightingDone() && T.alightWatchdog > 1.2) || T.alightWatchdog > 12) {
+          clearAlighters();
+          T.state = 'CLOSING'; T.timer = 0;
+          comps.forEach(c => c.doorTarget = 0);
+          logLine('dp', 'DOORS CLOSING — SERVICE TERMINATES HERE');
+        }
+      } else if (batchReady && alightSettled) {
+        // checked ahead of the pipeline branch so the button still works while
+        // live — there it means the same thing the Control Room's STOP & SEND
+        // TRAIN does: this crowd is the station, send the service
+        batchDepart = false;
+        boardingFromBatch = true;      // operator's passengers — ours to count
+        clearAlighters();
+        logLine('bd', 'BATCH FULLY ARRIVED — BOARDING, THEN DEPARTING');
+        startBoarding(false);
+      } else if (pipeline.active) {
+        // held by the Control Room: no dwell timer at all. We leave when the
+        // clip for this station has finished and depart has come through.
+        if (pipeline.pendingDepart && alightSettled) {
+          pipeline.pendingDepart = false;
+          boardingFromBatch = false;   // the clip's crowd is the engine's to count
+          clearAlighters();
+          startBoarding(false);
+        }
+      }
+      // Nothing else. Offline the train HOLDS here too, waiting for a batch,
+      // exactly as it waits for a clip when live. It used to leave on its own
+      // once CFG.dwell expired, which gave the operator about six seconds from
+      // the doors opening to press SEND BATCH before the service pulled out
+      // empty — so the button was mostly unreachable, and the log line telling
+      // them to "SEND A BATCH WHEN READY" was being printed by a train already
+      // on its way out. DEPART NOW remains the way to move an empty service on.
+      break;
+    }
+
+    case 'BOARDING': {
+      T.boardingWatchdog += dt;
+      // Late arrivals join the walk instead of being shut out — see
+      // sweepLateBoarders(). Cheap: three filtered zone lists, and on almost
+      // every frame it finds nothing to do.
+      sweepLateBoarders();
+
+      const stillWalking = agents.filter(a => a.state === 'BOARD').length;
+      const everyoneAboard = stillWalking === 0;
+      // The service leaves when the last person queued at these doors is
+      // inside it, full stop — there is no dwell timer racing the walk any
+      // more. The old hard 10s cut people off mid-platform and teleported them
+      // aboard, which is both a lie about what happened and the reason a busy
+      // stop looked like the train left without half the queue. CFG.boardingMax
+      // survives only as a safety net against a figure that never arrives at
+      // all, and when it fires it says so.
+      if (!everyoneAboard && T.boardingWatchdog > 4 && !T.boardingHeldLogged) {
+        T.boardingHeldLogged = true;
+        logLine('bd', `DOORS HELD — ${stillWalking} STILL BOARDING`);
+      }
+      if (everyoneAboard || T.boardingWatchdog > CFG.boardingMax) {
+        if (!everyoneAboard) {
+          logLine('sy', `BOARDING TIMED OUT AFTER ${CFG.boardingMax}s — ${stillWalking} FIGURE(S) NEVER REACHED THE DOORS`);
+        }
+        T.state = 'CLOSING'; T.timer = 0;
+        // only reachable via the safety net above: anyone still walking is
+        // treated as aboard rather than left chasing a departing train
+        for (let i = agents.length - 1; i >= 0; i--) {
+          if (agents[i].state === 'BOARD') removeAgent(agents[i]);
+        }
+        // settle any rounding remainder so the coach totals are exact, then
+        // freeze that as "previous info" for whoever queues at the next stop.
+        // Live, the totals aren't ours to settle — MQTT already has them.
+        comps.forEach(c => {
+          if (!pipeline.active || boardingFromBatch) {
+            c.boardedF += c.pending;
+            c.boarded = Math.round(c.boardedF);
+          }
+          c.pending = 0;
+          c.incoming = c.boarded;
+          c.doorTarget = 0;
+        });
+        refreshAllZones();
+        logLine('dp', 'DOORS CLOSING — STAND CLEAR');
+        showBoardingSummary();
+      }
+      break;
+    }
+
+    case 'CLOSING':
+      if (T.timer > 0.85) {
+        T.state = 'DEPARTING'; T.timer = 0; T.t = 0;
+        T.from = 0; T.to = OFFSCREEN; T.dur = 2.1;
+        const loads = comps.map(c => `C${c.idx+1}:${c.boarded}`).join('  ');
+        const nxt = isTerminus(run.station) ? 'DEPOT' : stationName(run.station + 1).toUpperCase();
+        logLine('dp', `DEPARTED → ${nxt}  [${loads}]  ONBOARD ${trainLoad()}/${TRAIN_CAP}`);
+      }
+      break;
+
+    case 'DEPARTING':
+      T.t += dt / T.dur;
+      T.x = T.from + (T.to - T.from) * ease.in(clamp(T.t, 0, 1));
+      if (T.t >= 1) {
+        // whoever didn't get on is still standing at the stop we just left
+        clearPlatform();
+
+        if (isTerminus(run.station)) { finishRun(); break; }
+
+        // a brief cut to black masks the instant scene swap and reads as the
+        // train pulling into the next station along the line
+        stationCut(0.6);
+
+        run.station++;
+        applyStation();
+        T.state = 'ABSENT'; T.timer = 0;
+        T.x = -OFFSCREEN;                  // the same train, now approaching the next stop
+        T.alighting = false;
+
+        // nobody boards at the terminus — the service ends there, so sending
+        // a fresh batch would just leave people standing forever
+        logLine('in', `STATION ${STATIONS[run.station].id} · ${stationName(run.station).toUpperCase()}`
+                    + (isTerminus(run.station) ? ' — TERMINUS, NO BOARDING'
+                     : pipeline.active         ? ' — LOAD THIS STATION’S CLIP'
+                                               : ' — SEND A BATCH WHEN READY'));
+      }
+      break;
+
+    case 'ABSENT':
+      if (T.timer >= CFG.gapAfterDep) {
+        T.state = 'ARRIVING'; T.timer = 0; T.t = 0;
+        T.from = -OFFSCREEN; T.to = 0; T.dur = 2.3;
+        comps.forEach(c => { c.doorOpen = 0; c.doorTarget = 0; });
+        logLine('dp', `SERVICE APPROACHING STATION ${STATIONS[run.station].id}`);
+      }
+      break;
+
+    case 'ARRIVING':
+      T.t += dt / T.dur;
+      T.x = T.from + (T.to - T.from) * ease.out(clamp(T.t, 0, 1));
+      if (T.t >= 1) {
+        T.x = 0; T.state = 'DOCKED'; T.timer = 0; T.dockedElapsed = 0;
+        T.alighting = false;
+        comps.forEach(c => c.doorTarget = 1);
+        logLine('dp', `DOCKED AT ${stationName(run.station).toUpperCase()} — DOORS OPENING`);
+        if (!isTerminus(run.station)) {
+          logLine('sy', pipeline.active
+            ? (pipeline.pendingDepart
+                ? 'DEPART ALREADY QUEUED — LEAVING AS SOON AS THE PLATFORM CLEARS'
+                : 'HOLDING — WAITING FOR THIS STATION’S CLIP TO FINISH')
+            : (batchDepart
+                ? 'BATCH ALREADY SENT — BOARDING AS SOON AS IT HAS ARRIVED'
+                : 'HOLDING — SEND A BATCH TO DISPATCH THIS SERVICE'));
+        }
+      }
+      break;
+  }
+
+  T.group.position.x = T.x;
+  trainGlow.position.x = clamp(T.x, -20, 20);
+
+  // dissolve into black over the outer stretch of the departure/arrival
+  // slide, instead of just sliding past the fog at a constant brightness
+  let fade = 1;
+  if (T.state === 'DEPARTING') fade = 1 - clamp((T.t - 0.5) / 0.5, 0, 1);
+  else if (T.state === 'ARRIVING') fade = clamp(T.t / 0.45, 0, 1);
+  else if (T.state === 'ABSENT') fade = 0;
+  setTrainFade(fade);
+  T.renderFade = fade;   // read by updateCoachFigures() so boarded figures fade with the shell
+
+  // door animation
+  comps.forEach(c => {
+    const sp = dt * 1.7;
+    c.doorOpen += clamp(c.doorTarget - c.doorOpen, -sp, sp);
+    const slide = c.doorOpen * (TR.doorW / 2 - 0.02);
+    c.doorsL.forEach(d => d.position.x = d.userData.baseX - slide);
+    c.doorsR.forEach(d => d.position.x = d.userData.baseX + slide);
+  });
+}
+
+/* ============================ AGENT SIMULATION ============================ */
+const SEP_R = 0.78;
+
+function updateAgents(dt) {
+  // staggered arrivals
+  while (pendingSpawns.length && pendingSpawns[0].at <= simTime) {
+    const p = pendingSpawns.shift();
+    spawnOne(p.zone, p.credit);
+  }
+
+  for (let i = agents.length - 1; i >= 0; i--) {
+    const a = agents[i];
+
+    // fade in / out
+    if (a.fadeDir > 0 && a.fade < 1) a.fade = Math.min(1, a.fade + dt * 3.2);
+    if (a.fadeDir < 0) {
+      a.fade -= dt * 3.4;
+      if (a.fade <= 0) { removeAgent(a); continue; }
+    }
+
+    a.phase += dt * a.speed * 3.4;
+
+    if (a.state === 'ENTER' || a.state === 'IDLE' || a.state === 'FADE') {
+      step(a, a.tx, a.tz, dt, a.state === 'IDLE' ? 0.35 : 0.16);
+      if (a.state === 'ENTER' && Math.hypot(a.tx - a.x, a.tz - a.z) < 0.4) {
+        a.state = 'IDLE';
+        a.speed = rnd(4.0, 5.2);   // settled in the queue, off the entrance stride
+      }
+    } else if (a.state === 'BOARD') {
+      const wp = a.wp[0];
+      const done = step(a, wp.x + train.x, wp.z, dt, 0.22);
+      if (done) {
+        a.wp.shift();
+        if (!a.wp.length) {
+          // Stepped inside the coach. Offline, this figure credits its share
+          // of the load to the coach. Live, decision_engine.py owns that
+          // number and publishes it on compartment/occupancy — crediting
+          // here as well would count the same person twice, so the walk is
+          // animation only and the tally arrives over MQTT.
+          const c = a.comp;
+          if (!pipeline.active || boardingFromBatch) {
+            const credit = Math.min(c.pending, c.perFigure);
+            c.boardedF += credit; c.pending -= credit;
+            c.boarded = Math.round(c.boardedF);
+            refreshAllZones();
+          }
+          removeAgent(a);
+          continue;
+        }
+      }
+    } else if (a.state === 'ALIGHT') {
+      // off the train, across the platform, out through the exit
+      const wp = a.wp[0];
+      if (step(a, wp.x, wp.z, dt, 0.4)) {
+        a.wp.shift();
+        if (!a.wp.length) { removeAgent(a); continue; }
+      }
+    }
+  }
+
+  separate(dt);
+}
+
+function step(a, tx, tz, dt, tol) {
+  const dx = tx - a.x, dz = tz - a.z;
+  const d = Math.hypot(dx, dz);
+  if (d < tol) { a.vx *= 0.7; a.vz *= 0.7; return true; }
+  const s = Math.min(a.speed, d / Math.max(dt, 1e-4));
+  a.vx = dx / d * s; a.vz = dz / d * s;
+  a.x += a.vx * dt; a.z += a.vz * dt;
+  return false;
+}
+
+/* Light mutual repulsion so the crowd reads as bodies, not stacked pins. */
+function separate(dt) {
+  for (const z of zones) {
+    const list = z.agents;
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      if (a.state === 'BOARD') continue;
+      for (let j = i + 1; j < list.length; j++) {
+        const b = list[j];
+        if (b.state === 'BOARD') continue;
+        const dx = b.x - a.x, dz = b.z - a.z;
+        const d2 = dx*dx + dz*dz;
+        if (d2 > SEP_R*SEP_R || d2 < 1e-6) continue;
+        const d = Math.sqrt(d2);
+        const push = (SEP_R - d) * 0.5 * Math.min(1, dt * 12);
+        const nx = dx/d * push, nz = dz/d * push;
+        a.x -= nx; a.z -= nz; b.x += nx; b.z += nz;
+      }
+      a.x = clamp(a.x, L.platX0 + 1.2, L.platX1 - 1.2);
+      a.z = clamp(a.z, L.platZ0 + 1.2, L.safeZ - 0.5);
+    }
+  }
+  // alighters aren't in any zone; only keep them off the track and back wall —
+  // no x-clamp, since their exit waypoint deliberately sits past the near end
+  for (const a of agents) {
+    if (a.state !== 'ALIGHT') continue;
+    a.z = clamp(a.z, L.platZ0 + 0.6, TR.z0 + 1.6);
+  }
+}
+
+/* ============================ ONBOARD COACH FIGURES ======================= */
+/* A small representative sample of real character clones standing inside
+   each compartment — grown/shrunk to track `rendered`, packed a bit tighter
+   near the doors as more people board. Not the true onboard count (that's
+   what the fill bar above the doors is for) — just enough bodies that the
+   coach visibly looks emptier or more packed at a glance.                   */
+function updateCoachFigures(dt) {
+  const show = train.state !== 'ABSENT' && train.state !== 'OFF';
+  const onboardScale = train.renderFade ?? 1;
+
+  comps.forEach(c => {
+    const target = show ? Math.min(c.rendered, CFG.compRenderCap) : 0;
+    while (c.onboardChars.length < target) c.onboardChars.push(spawnCharacter());
+    while (c.onboardChars.length > target) despawnCharacter(c.onboardChars.pop());
+
+    const k = c.onboardChars.length;
+    if (!k) return;
+
+    const cols = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(k * 1.4))));
+    const rows = Math.ceil(k / cols);
+    const sx = 0.85, sz = 0.78;
+    const z0 = (TR.z0 + TR.z1) / 2 - (rows - 1) * sz / 2 + 0.3;
+    const x0 = c.cx - (cols - 1) * sx / 2 + train.x;
+
+    c.onboardChars.forEach((ch, i) => {
+      if ((i & 1) === animPhase) ch.mixer.update(dt * 2);   // see updateCharacters
+      const r = Math.floor(i / cols), col = i % cols;
+      const jx = ((i * 37) % 11 - 5) * 0.018;
+      const jz = ((i * 53) % 9 - 4) * 0.02;
+      ch.root.position.set(x0 + col * sx + jx, TRAIN_FLOOR_Y, z0 + r * sz + jz);
+      ch.root.rotation.y = Math.atan2((i % 5 - 2) * 0.1, 1);
+      if (ch.shared) ch.root.visible = onboardScale > 0.05;
+      else for (const o of ch.meshes) o.material.opacity = onboardScale;
+    });
+  });
+}
+
+/* ================================= UI ===================================== */
+let uiDirty = true;
+const $ = id => document.getElementById(id);
+
+/* --- zone sliders --- */
+const zctl = $('zctl');
+zones.forEach(z => {
+  const row = document.createElement('div');
+  row.className = 'zrow';
+  row.innerHTML = `
+    <div class="lab">
+      <span class="nm"><i id="sw${z.id}"></i>${z.name}</span>
+      <span class="rd"><b id="cv${z.id}">0</b><u>QUEUED</u><em id="st${z.id}">SPACE</em></span>
+    </div>
+    <input type="range" id="sl${z.id}" min="0" max="60" value="0" />
+    <div class="meta"><span class="conf" id="cf${z.id}">CONF --%</span><span class="spark" id="sp${z.id}"></span></div>`;
+  zctl.appendChild(row);
+  z.$sw = $('sw' + z.id); z.$cv = $('cv' + z.id); z.$st = $('st' + z.id); z.$sl = $('sl' + z.id);
+  z.$cf = $('cf' + z.id); z.$sp = $('sp' + z.id);
+  z.$sl.addEventListener('input', () => {
+    const v = +z.$sl.value;
+    const d = v - z.count;
+    setZoneCount(z, v, true);
+    logLine('sy', `MANUAL SET ${z.name} → ${v} (${d >= 0 ? '+' : ''}${d})`);
+  });
+});
+
+function syncSliders() { zones.forEach(z => { z.$sl.value = z.count; }); }
+
+/* --- compartment readout ---
+   One row per compartment: the solid bar is who is already aboard, the
+   hatched bar on top is who is queued at those doors on this platform, and
+   the percentage is the two together — the projected load the LED outside is
+   advertising. Live MQTT and the local simulation write the same `boarded`
+   and `count` fields, so this panel is identical either way; there is no
+   separate "real" readout to reconcile against.                            */
+const compBody = $('compBody');
+comps.forEach(c => {
+  const row = document.createElement('div');
+  row.className = 'crow';
+  row.innerHTML = `
+    <div class="l"><span class="id" id="ci${c.idx}">${zones[c.idx].name}<u>ZONE ${zones[c.idx].id}</u></span>
+      <span class="p" id="cp${c.idx}">0%</span></div>
+    <div class="bar"><i class="q" id="cq${c.idx}"></i><i id="cb${c.idx}"></i></div>
+    <div class="sub"><span>ONBOARD <b id="co${c.idx}">0</b></span><span>QUEUE <b id="cw${c.idx}">0</b></span><span>BOARDED <b id="cb2${c.idx}">0</b></span></div>`;
+  compBody.appendChild(row);
+  c.$row = row;
+  c.$p = $('cp' + c.idx); c.$b = $('cb' + c.idx); c.$q = $('cq' + c.idx);
+  c.$o = $('co' + c.idx); c.$w = $('cw' + c.idx); c.$bd = $('cb2' + c.idx);
+});
+$('compCap').textContent = CFG.compCapacity;
+
+function updateCompUI() {
+  const best = bestCoach();
+  comps.forEach(c => {
+    // figures drawn inside follow the true load, capped for performance
+    c.rendered = Math.min(CFG.compRenderCap, c.boarded);
+
+    const z = zones[c.idx];
+    const load = compLoad(c.idx);
+    const pct     = clamp(Math.round(load / CFG.compCapacity * 100), 0, 100);
+    const pctOn   = clamp(Math.round(c.boarded / CFG.compCapacity * 100), 0, 100);
+    const key = `${load}|${c.boarded}|${z.status}|${best}|${c.boardedHere}`;
+    if (c._key !== key) {
+      c._key = key;
+      const hex = HEX[z.status];
+      c.$p.textContent = pct + '%';
+      c.$p.style.color = hex;
+      c.$p.title = `${c.boarded} aboard + ${z.count} queued = ${load} / ${CFG.compCapacity}`;
+      c.$b.style.width = pctOn + '%';
+      c.$b.style.background = hex;
+      c.$b.style.boxShadow = `0 0 8px ${hex}`;
+      c.$q.style.width = pct + '%';
+      c.$q.style.background = hex;
+      c.$o.textContent = c.boarded;
+      c.$w.textContent = z.count;
+      c.$bd.textContent = c.boardedHere || 0;
+      c.$row.classList.toggle('best', c.idx === best);
+
+      // the physical fill bar above the doors shows the same projected load
+      c.barMat.color.set(hex);
+      c.bar.scale.x = Math.max(0.001, pct / 100);
+      c.bar.position.x = c.cx - c.barW/2 + (c.barW * pct/100)/2;
+    }
+  });
+
+  $('compState').textContent = run.state === 'IDLE' ? 'IDLE' : train.state;
+  $('compTotal').textContent = `${trainLoad()}/${TRAIN_CAP}`;
+
+  const recKey = `${best}|${compLoad(best)}|${run.state}|${pipeline.active}`;
+  if (updateCompUI._rec !== recKey) {
+    updateCompUI._rec = recKey;
+    $('compRec').innerHTML = run.state === 'IDLE'
+      ? (pipeline.active ? 'LOAD A CLIP IN THE CONTROL ROOM' : 'AWAITING SERVICE')
+      : `BOARD VIA <b style="color:var(--low)">${zones[best].name}</b> — LEAST FULL (${compLoad(best)}/${CFG.compCapacity})`;
+  }
+}
+
+/* ============================ SIMULATED CLOCK =============================
+   This is a Bangalore metro, so the displayed clock is IST — full stop. It
+   used to be whatever timezone the browser happened to sit in, which meant
+   "Republic Day, 09:00" set from the Control Room showed up in the Twin as
+   some other hour entirely, and the two consoles disagreed about what time
+   the simulation thought it was.
+
+   `simTimeOffsetMs` is the gap between the simulated moment and now, so the
+   clock keeps ticking forward after a jump instead of freezing. Zero means
+   "run on the real clock".                                                  */
+let simTimeOffsetMs = 0;
+
+const IST_PARTS = new Intl.DateTimeFormat('en-CA', {
+  timeZone:'Asia/Kolkata', year:'numeric', month:'2-digit', day:'2-digit',
+  hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23',
+  // weekday because the crowd baseline is a (day-of-week, hour) lookup — the
+  // date readout should show the thing the prediction actually keys on
+  weekday:'short'
+});
+const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+
+const simNow = () => Date.now() + simTimeOffsetMs;
+
+/* {year,month,day,hour,minute,second} in IST, all zero-padded strings. */
+function istParts(ms = simNow()) {
+  const out = {};
+  for (const p of IST_PARTS.formatToParts(new Date(ms))) out[p.type] = p.value;
+  return out;
+}
+
+/* A naive "YYYY-MM-DDTHH:MM:SS" (or a bare date + hour) means IST, since
+   that's what both consoles' inputs collect. Parsing it with the browser's
+   own offset is the bug this replaces. */
+function istIsoToMs(iso) {
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2})(?::(\d{2})(?::(\d{2}))?)?)?/);
+  if (!m) return NaN;
+  const [, y, mo, d, h = '00', mi = '00', s = '00'] = m;
+  return Date.parse(`${y}-${mo}-${d}T${h}:${mi}:${s}+05:30`);
+}
+
+/* Applies a simulated moment locally. Returns false on an unparseable value
+   so callers can skip the log line rather than announce a bogus jump. */
+function applySimTime(iso) {
+  const ms = istIsoToMs(iso);
+  if (isNaN(ms)) return false;
+  simTimeOffsetMs = ms - Date.now();
+  fillTimeInputs();
+  updateTimeHint();
+  return true;
+}
+
+function fillTimeInputs() {
+  const p = istParts();
+  $('simDate').value = `${p.year}-${p.month}-${p.day}`;
+  $('simHour').value = String(Number(p.hour));
+}
+
+function updateTimeHint() {
+  const drift = Math.abs(simTimeOffsetMs);
+  if (drift < 60000) { $('timeHint').textContent = 'CLOCK RUNS ON REAL IST'; return; }
+  // a date jump is thousands of hours; quoting the figure is useless, so say
+  // where the clock is rather than how far it moved
+  const p = istParts();
+  const hours = Math.round(drift / 3600000);
+  $('timeHint').textContent = hours < 48
+    ? `CLOCK SHIFTED ${simTimeOffsetMs > 0 ? '+' : '−'}${hours}H — SHARED WITH CONTROL ROOM`
+    : `SIMULATING ${p.year}-${p.month}-${p.day} — SHARED WITH CONTROL ROOM`;
+}
+
+/* --- activity log --- */
+const logEl = $('log');
+function stampNow() {
+  const p = istParts();
+  return `${p.hour}:${p.minute}:${p.second}`;
+}
+function logLine(kind, msg) {
+  const e = document.createElement('div');
+  e.className = 'e ' + kind;
+  e.innerHTML = `<span class="t">${stampNow()}</span><span class="m"></span>`;
+  e.lastChild.textContent = msg;
+  logEl.appendChild(e);
+  while (logEl.children.length > 140) logEl.removeChild(logEl.firstChild);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+/* --- station progress strip --- */
+const stnStrip = $('stnStrip');
+STATIONS.forEach((s, i) => {
+  if (i) { const l = document.createElement('div'); l.className = 'l'; l.id = 'sl_' + i; stnStrip.appendChild(l); }
+  const d = document.createElement('div');
+  d.className = 's'; d.id = 'ss_' + i; d.textContent = s.id; d.title = s.name;
+  stnStrip.appendChild(d);
+});
+function paintStrip() {
+  STATIONS.forEach((s, i) => {
+    const el = $('ss_' + i);
+    const here = run.state !== 'IDLE' && i === run.station;
+    const past = run.state === 'COMPLETE' ? true : i < run.station;
+    el.className = 's' + (here ? ' now' : past ? ' past' : '');
+    if (i) $('sl_' + i).className = 'l' + (i <= run.station ? ' past' : '');
+  });
+}
+
+/* --- run banner --- */
+let bannerHide = 0;
+function banner(title, sub, hold) {
+  $('bannerT').textContent = title;
+  $('bannerS').textContent = sub || '';
+  $('banner').classList.add('on');
+  bannerHide = hold === Infinity ? Infinity : simTime + (hold || 2.4);
+}
+function updateBanner() {
+  if (bannerHide !== Infinity && bannerHide && simTime > bannerHide) {
+    $('banner').classList.remove('on');
+    bannerHide = 0;
+  }
+}
+
+/* --- station-cut blackout --- */
+let cutHide = 0;
+function stationCut(hold = 0.8) {
+  $('cut').classList.add('on');
+  cutHide = simTime + hold;
+}
+function updateCut() {
+  if (cutHide && simTime > cutHide) {
+    $('cut').classList.remove('on');
+    cutHide = 0;
+  }
+}
+
+/* --- buttons --- */
+$('btnStart').addEventListener('click', () => {
+  if (run.state === 'RUNNING') return;
+  startRun();
+  banner('RUN STARTED', `${STATIONS.length} STOPS — SEND BATCHES AT YOUR OWN PACE\nCOACH LIMIT ${CFG.compCapacity} × 3`, 2.6);
+  syncButtons();
+});
+
+$('btnResetRun').addEventListener('click', () => {
+  resetAll(false);
+  $('banner').classList.remove('on'); bannerHide = 0;
+  syncButtons();
+});
+
+$('btnSend').addEventListener('click', () => {
+  if (run.state === 'COMPLETE') { logLine('sy', 'BATCH IGNORED — RUN ALREADY COMPLETE'); return; }
+  if (run.state === 'RUNNING' && isTerminus(run.station)) {
+    logLine('sy', 'BATCH IGNORED — SERVICE TERMINATES HERE'); return;
+  }
+  const n = clamp(parseInt($('inCount').value, 10) || 0, 1, 150);
+  $('inCount').value = n;
+
+  // A batch is a service in its own right, so from idle it brings the train in
+  // exactly the way a clip does (see noteClipStarted) rather than being ignored
+  // until somebody presses START RUN. startRun() clears pendingSpawns and
+  // resets batchDepart, so it has to happen before either is set below.
+  if (run.state !== 'RUNNING') {
+    startRun();
+    logLine('sy', 'BATCH SENT WHILE IDLE — RUN STARTED, SERVICE INBOUND');
+  }
+
+  queueArrivals(n);
+  // this batch IS the service — see batchDepart
+  batchDepart = true;
+
+  // Live, the LED verdict on file came from the engine, which has not seen and
+  // cannot see these passengers. Hand the strips back to the Twin's own rule
+  // rather than leaving them advertising a platform that no longer exists.
+  if (pipeline.active) {
+    zones.forEach(z => { z.liveStatus = null; });
+    refreshAllZones();
+  }
+
+  logLine('in', `BATCH SENT +${n} → ${stationName(run.station).toUpperCase()} — LED-GUIDED DISTRIBUTION`);
+  logLine('sy', 'TRAIN WILL DEPART ONCE THIS BATCH IS ABOARD');
+});
+
+$('btnTrain').addEventListener('click', () => {
+  if (train.state !== 'DOCKED') { logLine('sy', `IGNORED — TRAIN STATE ${train.state}`); return; }
+  if (isTerminus(run.station)) { logLine('sy', 'IGNORED — SERVICE TERMINATES HERE'); return; }
+  if (!alightingDone()) { logLine('sy', 'IGNORED — PASSENGERS STILL ALIGHTING'); return; }
+  // whatever is standing there is whatever the last send put there
+  boardingFromBatch = batchDepart;
+  batchDepart = false;
+  startBoarding(true);
+});
+
+$('btnRush').addEventListener('click', () => {
+  zones.forEach(z => setZoneCount(z, irnd(14, 46), true));
+  syncSliders();
+  logLine('sy', `RUSH SCENARIO — ${zones.map(z => z.id + ':' + z.count).join('  ')}`);
+});
+
+$('btnClear').addEventListener('click', () => {
+  pendingSpawns.length = 0;
+  zones.forEach(z => setZoneCount(z, 0, true));
+  syncSliders();
+  logLine('sy', 'PLATFORM CLEARED → 0');
+});
+
+/* --- simulated clock ---
+   Set from either console and both follow. Applied locally first so the Twin
+   responds instantly even with no broker, then published retained so the
+   Control Room (and any tab that connects later) lands on the same moment.
+   The Control Room answers a twin-set time with a fresh prediction/baseline
+   for that date, which is what closes the loop. */
+$('btnSetTime').addEventListener('click', () => {
+  const date = $('simDate').value;
+  const hour = clamp(parseInt($('simHour').value, 10) || 0, 0, 23);
+  if (!date) { logLine('sy', 'SET CLOCK IGNORED — NO DATE'); return; }
+  $('simHour').value = hour;
+
+  const iso = `${date}T${String(hour).padStart(2, '0')}:00:00`;
+  if (!applySimTime(iso)) { logLine('sy', 'SET CLOCK IGNORED — BAD DATE'); return; }
+
+  const shared = publishSimTime(iso);
+  logLine('sy', `CLOCK SET TO ${iso.replace('T', ' ')} IST${shared ? ' — SHARED WITH CONTROL ROOM' : ' (LOCAL ONLY — NOT LIVE)'}`);
+  banner('CLOCK SET', `${date}  ${String(hour).padStart(2, '0')}:00 IST`, 2.2);
+});
+
+$('btnNowTime').addEventListener('click', () => {
+  simTimeOffsetMs = 0;
+  fillTimeInputs();
+  updateTimeHint();
+  // full precision, not the top of the hour — truncating here would rewind
+  // the clock by up to 59 minutes while claiming to restore real time
+  const p = istParts();
+  const iso = `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;
+  const shared = publishSimTime(iso);
+  logLine('sy', `CLOCK BACK ON REAL IST${shared ? ' — SHARED WITH CONTROL ROOM' : ''}`);
+});
+
+function syncButtons() {
+  const running = run.state === 'RUNNING';
+  const terminus = running && isTerminus(run.station);
+  $('btnStart').disabled = running;
+  $('btnStart').textContent = run.state === 'COMPLETE' ? '▶ START AGAIN' : '▶ START RUN';
+  $('btnTrain').disabled = !running || terminus;
+  // Enabled while live, and while idle: a batch starts a run the same way a
+  // clip does, so gating this on `running` meant that live — where the run only
+  // ever starts from a clip — the button was permanently dead, and a clip was
+  // the only thing that could move the train.
+  $('btnSend').disabled  = run.state === 'COMPLETE' || terminus;
+  $('btnRush').disabled  = !running || mqttLive;
+  $('btnClear').disabled = !running || mqttLive;
+  zones.forEach(z => { z.$sl.disabled = !running || mqttLive; });
+}
+
+/* ================================ MQTT LIVE ================================
+   Optional live mode: subscribes to the decision engine's retained zone/state
+   topic (see pipeline/docs/mqtt_contract.md) over MQTT-over-WebSockets and
+   drives zone occupancy from real messages instead of the local sim/manual
+   sliders. Feeds the exact same setZoneCount() path those already use, so
+   every downstream effect (LED colour, sprite readout, crowd figures
+   spawning/despawning, coach fill) reacts to live data with no separate code
+   path. Off by default — nothing here runs unless GO LIVE is clicked.       */
+const MQTT_WS_URL = 'ws://localhost:9001';
+// only used for the one topic the Twin publishes on (control/time); it
+// subscribes with a station wildcard, so this doesn't gate anything inbound
+const STATION_ID = 'stn1';
+const zoneById = Object.fromEntries(zones.map(z => [z.id, z]));
+let mqttLive = false;
+let mqttClient = null;
+// gate/entry_exit arrives per zone now (see mqtt_contract.md) — tally each
+// zone's latest totals here so the topbar can show the station-wide sum
+const gateTotals = Object.fromEntries(zones.map(z => [z.id, { entered: 0, exited: 0 }]));
+function renderGateTotal() {
+  const sum = (k) => zones.reduce((s, z) => s + gateTotals[z.id][k], 0);
+  $('mGate').textContent = `${sum('entered')} / ${sum('exited')}`;
+}
+
+/* --- live compartment occupancy (real, from decision_engine.py) ---------
+   This used to be parked in a side panel of its own, on the reasoning that
+   writing it into `comps[].boarded` would fight the Twin's own boarding
+   animation for that field. The result was a Twin that rendered a simulation
+   while the real answer sat in a box in the corner — the data never reached
+   the model. So the ownership is now explicit instead of avoided: while live,
+   MQTT owns `boarded` outright and the boarding walk is animation only (see
+   the BOARD credit in updateAgents); offline, the simulation owns it. One
+   field, one writer at a time, and the 3D scene always shows the real
+   numbers when there are real numbers to show.                            */
+/* RESET OCCUPANCY in the Control Room. It zeroes the onboard tally and the
+   decision engine republishes that, which the Twin already followed — but
+   only half the compartment picture is onboard load. The other half is the
+   platform queue, and nothing cleared it, so the coach bars stayed pegged
+   wherever the last clip's telemetry left them and the button looked broken.
+   It's billed as the reset for a fresh demo journey, so it clears both. */
+function resetJourney() {
+  pendingSpawns.length = 0;
+  for (let i = agents.length - 1; i >= 0; i--) {
+    const a = agents[i];
+    if (a.state === 'IDLE' || a.state === 'ENTER' || a.state === 'FADE') removeAgent(a);
+  }
+  zones.forEach(z => {
+    z.count = 0; z.hist.length = 0; z.trend = 'steady'; z.liveStatus = null;
+    z.freeSlots = z.slots.map((_, i) => i);
+  });
+  comps.forEach(c => { c.boarded = 0; c.boardedF = 0; c.pending = 0; c.incoming = 0; c.boardedHere = 0; });
+  refreshAllZones();
+  updateCompUI();
+  syncSliders();
+  logLine('sy', 'CONTROL ROOM — OCCUPANCY RESET, COACHES AND PLATFORM CLEARED');
+  banner('RESET', 'COACHES AND PLATFORM CLEARED', 2.2);
+}
+
+function applyLiveOccupancy(zoneId, occupancy) {
+  const z = zoneById[zoneId];
+  if (!z || typeof occupancy !== 'number') return;
+  const c = comps[z.idx];
+  c.boarded  = Math.max(0, Math.round(occupancy));
+  c.boardedF = c.boarded;
+  c.pending  = 0;
+  // what the next station's arrivals will see as this coach's inbound load
+  c.incoming = c.boarded;
+  refreshAllZones();
+  updateCompUI();
+}
+
+/* The expected-crowd baseline from the Control Room's BMRCL model.
+
+   The topbar cell that used to display this has been removed while a new home
+   for it is decided, so the reading is held here instead of being written
+   straight into the DOM. The subscription is untouched and the value stays
+   current — dropping an element with id="mPredicted" anywhere in the page is
+   the whole of what's needed to show it again, and until then it still reaches
+   the operator through the activity log. */
+let baseline = null;
+
+function renderBaseline() {
+  const el = $('mPredicted');
+  if (!el || !baseline) return;
+  el.textContent = String(baseline.level).toUpperCase();
+  el.style.color = HEX[baseline.level] || '';
+  el.title = baseline.reason;
+}
+
+function setMqttStatus(text) { $('mqttStatus').textContent = text; }
+
+function mqttConnect() {
+  setMqttStatus('CONNECTING…');
+  mqttClient = mqtt.connect(MQTT_WS_URL, { reconnectPeriod: 2000 });
+
+  mqttClient.on('connect', () => {
+    brokerUp = true;
+    updateMqttLabel();
+    mqttClient.subscribe('metropulse/+/zone/+/state', { qos: 1 });
+    mqttClient.subscribe('metropulse/+/gate/+/entry_exit', { qos: 0 });
+    mqttClient.subscribe('metropulse/+/prediction/baseline', { qos: 1 });
+    mqttClient.subscribe('metropulse/+/control/train', { qos: 1 });
+    mqttClient.subscribe('metropulse/+/control/time', { qos: 1 });
+    mqttClient.subscribe('metropulse/+/compartment/+/occupancy', { qos: 1 });
+    mqttClient.subscribe('metropulse/+/control/reset', { qos: 1 });
+    $('compState').textContent = 'LIVE';
+    logLine('sy', `MQTT CONNECTED — ${MQTT_WS_URL}`);
+    if (unsharedSimTimeIso) {
+      const iso = unsharedSimTimeIso;
+      // after the subscribes, so the retained value lands first and this
+      // deliberately overrides it — the operator's setting is the newer one
+      if (publishSimTime(iso)) logLine('sy', `CLOCK ${iso.replace('T', ' ')} IST NOW SHARED WITH CONTROL ROOM`);
+    }
+  });
+
+  mqttClient.on('reconnect', () => { brokerUp = false; setMqttStatus('RECONNECTING…'); });
+  mqttClient.on('close', () => { brokerUp = false; updateMqttLabel(); });
+  mqttClient.on('error', err => {
+    brokerUp = false;
+    setMqttStatus('ERROR');
+    logLine('sy', `MQTT ERROR — ${err.message || err}`);
+  });
+
+  mqttClient.on('message', (topic, buf) => {
+    let msg;
+    try { msg = JSON.parse(buf.toString()); }
+    catch { return; }
+
+    /* The broker connection is now permanent — the passenger app needs
+       twin/state in both modes (see the GO LIVE handler). GO LIVE therefore
+       no longer means "connected", it means "the Control Room drives this
+       run", and everything below that would move the simulation has to check
+       that explicitly. Without this, opening the Twin would silently hand
+       control to whatever the pipeline last published. */
+    const driving = pipeline.active;
+
+    if (topic.includes('/gate/') && topic.endsWith('/entry_exit')) {
+      if (!driving) return;
+      const z = zoneById[msg.zone_id];
+      if (z) {
+        gateTotals[msg.zone_id].entered = msg.entered_total;
+        gateTotals[msg.zone_id].exited = msg.exited_total;
+        // what the engine decided boarded here, from the platform delta
+        if (msg.entered_delta) comps[z.idx].boardedHere = msg.entered_delta;
+        renderGateTotal();
+        updateCompUI();
+      }
+      return;
+    }
+    if (topic.includes('/compartment/') && topic.endsWith('/occupancy')) {
+      if (driving) applyLiveOccupancy(msg.zone_id, msg.occupancy);
+      return;
+    }
+    if (topic.endsWith('/control/reset')) {
+      if (driving) resetJourney();
+      return;
+    }
+    if (topic.includes('/prediction/baseline')) {
+      baseline = { level: msg.expected_level, reason: msg.reason || '' };
+      renderBaseline();
+      logLine('sy', `PREDICTED CROWD ${String(baseline.level).toUpperCase()} — ${baseline.reason}`);
+      return;
+    }
+    if (topic.includes('/control/time')) {
+      // Skip on the value, not on `origin`. Filtering by origin==='twin'
+      // suppressed our own immediate echo, but it also suppressed our own
+      // RETAINED message on a later connect — so a clock set before a reload
+      // silently reverted to real time while the rest of the pipeline stayed
+      // on the simulated one. Comparing offsets covers both: an echo of what
+      // we already hold is a no-op either way, anything else is real news.
+      const ms = istIsoToMs(msg.target_iso);
+      if (isNaN(ms)) return;
+      if (Math.abs((ms - Date.now()) - simTimeOffsetMs) < 5000) return;   // already there
+      if (Date.now() - simTimePublishedAt < 3000) return;                 // we just set it
+      applySimTime(msg.target_iso);
+      logLine('sy', `CLOCK SET TO ${String(msg.target_iso).replace('T', ' ')} IST — FROM CONTROL ROOM`);
+      return;
+    }
+    if (topic.includes('/control/train')) {
+      if (!driving) return;
+      if (msg.action === 'arrive') {
+        noteClipStarted(msg.source_name);
+      } else if (msg.action === 'announce') {
+        banner(msg.message || 'STARTING TRAIN', '', 3);
+        logLine('sy', `CONTROL ROOM — ${msg.message || 'STARTING TRAIN'}`);
+      } else if (msg.action === 'depart') {
+        requestDepart();
+      }
+      return;
+    }
+
+    if (!driving) return;                      // zone/state drives the platform
+    const zone = zoneById[msg.zone_id];
+    if (!zone || typeof msg.count !== 'number') return;
+
+    // v3 carries the engine's own compartment verdict; v2 doesn't, and the
+    // Twin falls back to computing it (see refreshZone)
+    zone.liveStatus = msg.compartment_status || null;
+    // people walk in from the concourse rather than blinking into position
+    setZoneQueueLive(zone, msg.count);
+    syncSliders();
+    if (zone.$cf) zone.$cf.textContent = `CONF ${Math.round((msg.confidence ?? 0) * 100)}%`;
+  });
+}
+
+function mqttDisconnect() {
+  if (mqttClient) { mqttClient.end(true); mqttClient = null; }
+  setMqttStatus('OFFLINE');
+}
+
+/* The Twin talks back on exactly one topic — the simulated clock. Everything
+   else it does is downstream of the pipeline; the clock is the one piece of
+   state an operator can legitimately set from either end, so both ends
+   publish it and both ends listen. Retained, so whichever tab connects later
+   still lands on the same simulated time. */
+// a clock set before GO LIVE has nowhere to go yet — remember it and send it
+// the moment we connect, rather than letting the broker's older retained
+// value quietly overwrite what the operator just asked for
+let unsharedSimTimeIso = null;
+// when we last published. On connect our flush and the broker's older
+// retained message are in flight at the same time with no ordering guarantee
+// between them, so inbound control/time is ignored briefly afterwards — ours
+// is the newer intent and must not lose that race.
+let simTimePublishedAt = 0;
+
+/* ------------------- Twin -> passenger app: twin/state -------------------
+   What the platform LEDs are saying, on the wire, so the passenger app can
+   say the same thing without reimplementing any of it.
+
+   It has to come from the Twin rather than from the existing MQTT topics,
+   because those only carry the answer in live mode. Offline — a batch, the
+   sliders, the rush scenario — the Twin owns `boarded` outright and the
+   decision engine never sees a thing, so an app subscribed to
+   compartment/occupancy would sit at zero through an entire demo run. This
+   topic is the Twin's own view either way, which is exactly what the app is
+   meant to mirror.
+
+   Retained, so an app opened mid-run is current immediately rather than
+   blank until the next change. `ts` is included so it can tell a live Twin
+   from a retained message left behind by one that has since closed. */
+let lastTwinStateKey = '';
+let lastTwinStateAt = 0;
+/* Identity for this browser tab. twin/state is a single retained topic, so
+   two Twin tabs both publishing to it overwrite each other and a subscriber
+   sees the station flip between two different runs — which looks exactly like
+   the Twin can't decide where the train is. It is easy to end up with two
+   open. Stamping the publisher lets the app say so instead of rendering the
+   confusion. */
+const TWIN_PUBLISHER_ID = Math.random().toString(36).slice(2, 10);
+
+function publishTwinState(force) {
+  if (!mqttClient || !mqttClient.connected) return;
+
+  const best = bestCoach();
+  // bestCoach() has to answer with one coach — the LED strip and the console's
+  // "board via" line each need a single winner. A passenger doesn't: when two
+  // coaches are carrying exactly the same number, telling them one of the two
+  // is arbitrary, and sending an entire platform to the arbitrary one is how
+  // you unbalance a train that was already balanced. So the set of coaches
+  // tied at the lightest load goes out alongside it, and the app can offer
+  // the choice.
+  const minLoad = Math.min(...comps.map((_, i) => compLoad(i)));
+  const bestSet = comps.map((_, i) => i).filter(i => compLoad(i) === minLoad);
+  const coaches = comps.map((c, i) => ({
+    id: zones[i].id,
+    name: zones[i].name,
+    onboard: c.boarded,
+    queue: zones[i].count,
+    load: compLoad(i),
+    status: zones[i].status,
+    recommended: compLoad(i) === minLoad
+  }));
+
+  // Republish on change, plus a slow heartbeat so the app can distinguish
+  // "nothing is moving" from "the Twin went away mid-run".
+  const key = JSON.stringify(coaches) + run.state + train.state + run.station;
+  const now = Date.now();
+  if (!force && key === lastTwinStateKey && now - lastTwinStateAt < 5000) return;
+  lastTwinStateKey = key;
+  lastTwinStateAt = now;
+
+  const p = istParts();
+  mqttClient.publish(`metropulse/${STATION_ID}/twin/state`, JSON.stringify({
+    schema: 'metropulse.twin_state.v1',
+    station_id: STATION_ID,
+    publisher: TWIN_PUBLISHER_ID,
+    ts: new Date().toISOString(),
+    // the simulated moment, not the wall clock — the app keys its crowd
+    // forecast off this so both ends agree on what day it is
+    sim_iso: `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`,
+    run_state: run.state,
+    train_state: train.state,
+    live: pipeline.active,
+    station: {
+      index: run.station,
+      id: STATIONS[run.station].id,
+      name: stationName(run.station),
+      count: STATIONS.length,
+      terminus: isTerminus(run.station)
+    },
+    next_station: isTerminus(run.station) ? null : stationName(run.station + 1),
+    line: STATIONS.map(st => st.name),
+    compartment_capacity: CFG.compCapacity,
+    coaches,
+    best_coach: best,          // the single winner, for anything that needs one
+    best_coaches: bestSet,     // every coach tied at the lightest load
+    waiting_total: zones.reduce((a, z) => a + z.count, 0),
+    onboard_total: trainLoad()
+  }), { qos: 1, retain: true });
+}
+
+function publishSimTime(targetIso) {
+  if (!mqttClient || !mqttClient.connected) { unsharedSimTimeIso = targetIso; return false; }
+  unsharedSimTimeIso = null;
+  simTimePublishedAt = Date.now();
+  mqttClient.publish(`metropulse/${STATION_ID}/control/time`, JSON.stringify({
+    schema: 'metropulse.control_time.v1',
+    station_id: STATION_ID,
+    ts: new Date().toISOString(),
+    target_iso: targetIso,
+    origin: 'twin'
+  }), { qos: 1, retain: true });
+  return true;
+}
+
+/* GO LIVE switches MODE, not the connection.
+
+   It used to do both, and that quietly broke the passenger app: the Twin only
+   published twin/state while connected, and the only way to connect was to go
+   live — so with the Twin in its normal offline simulation the app received
+   nothing at all and sat on whatever was last retained, looking frozen. The
+   broker link is now brought up at boot and stays up purely as a transport;
+   this button only decides whether the Control Room drives the run, which is
+   what an operator actually means by it. Every inbound topic that could move
+   the simulation checks pipeline.active — see `driving` in the message
+   handler. */
+$('btnMqtt').addEventListener('click', () => {
+  mqttLive = !mqttLive;
+  pipeline.active = mqttLive;
+  $('btnMqtt').textContent = mqttLive ? '■ GO OFFLINE' : '▶ GO LIVE';
+  $('btnMqtt').classList.toggle('pri', mqttLive);
+  $('note').innerHTML = mqttLive
+    ? '<b>LIVE PIPELINE</b> — TILED PERSON DETECTION + MCNN DENSITY OVER MQTT. BOARDING IS MEASURED AS THE CHANGE IN PLATFORM CROWD ACROSS THE DWELL, AND ASSUMES PEOPLE WHO LEFT THE PLATFORM BOARDED THE TRAIN.'
+    : '<b>CONCEPT SIMULATION</b> — SYNTHETIC DATA ONLY. NO CAMERA FEED, NO ML MODEL, NO LIVE NETWORK. PRESS GO LIVE TO DRIVE THIS FROM THE REAL PIPELINE.';
+  if (mqttLive) {
+    logLine('sy', 'MQTT LIVE MODE ENABLED — CONTROL ROOM DRIVES THE RUN');
+  } else {
+    pipeline.pendingDepart = false;
+    // hand the LED decision back to the local rule — a stale verdict from a
+    // pipeline that is no longer publishing would just freeze the strips
+    zones.forEach(z => { z.liveStatus = null; });
+    refreshAllZones();
+    $('compState').textContent = run.state === 'IDLE' ? 'IDLE' : train.state;
+    logLine('sy', 'MQTT LIVE MODE DISABLED — LOCAL SIMULATION RESUMED');
+  }
+  updateMqttLabel();
+  syncButtons();
+});
+
+/* The status word next to the button describes the BROKER, which is now
+   independent of the mode; the button itself describes the mode. Saying
+   "OFFLINE" for a connected Twin that simply isn't taking orders was the
+   confusing part. */
+let brokerUp = false;
+function updateMqttLabel() {
+  setMqttStatus(!brokerUp ? 'NO BROKER'
+                : mqttLive ? 'LIVE — PIPELINE DRIVING'
+                           : 'CONNECTED — FEEDING APP');
+}
+
+/* --- top bar / HUD --- */
+let uiTimer = 0;
+function updateHUD(dt) {
+  uiTimer += dt;
+  if (uiTimer < 0.1) return;
+  uiTimer = 0;
+
+  // Ran from updateAgents(), i.e. once per frame, to keep the coach panel in
+  // step with figures stepping aboard. It walks three compartments, reads
+  // bestCoach() and touches the DOM, and none of that is worth doing 60 times
+  // a second for a readout a human is looking at — 10Hz is the same picture.
+  updateCompUI();
+  // same cadence for the passenger app's feed — publishTwinState() drops
+  // anything that hasn't actually changed
+  publishTwinState(false);
+
+  // date and clock both read the one simulated moment, so they can never
+  // disagree with each other or with the Control Room
+  const p = istParts();
+  const clock = `${p.hour}:${p.minute}:${p.second}`;
+  const date = `${p.day} ${MONTHS[+p.month - 1]}`;
+  $('mClock').textContent = clock;
+  const dv = $('mDate');
+  if (dv.textContent !== date) {
+    dv.textContent = date;
+    dv.title = `${p.weekday} ${p.day} ${MONTHS[+p.month - 1]} ${p.year} — IST`;
+  }
+  $('stamp').textContent = `${p.year}-${p.month}-${p.day} ${clock} IST`;
+
+  const total = zones.reduce((s, z) => s + z.count, 0);
+  const high = zones.filter(z => z.status === 'high').length;
+  $('mTotal').textContent = total;
+  $('mOnboard').textContent = trainLoad();
+  const hv = $('mHigh');
+  hv.textContent = high;
+  hv.classList.toggle('hot', high > 0);
+
+  const tv = $('mTrain');
+  // a docked train is waiting on the operator either way now — for a clip when
+  // live, for a batch when not — so both read as HOLDING rather than DOCKED
+  const held = train.state === 'DOCKED' && !isTerminus(run.station)
+               && (pipeline.active ? !pipeline.pendingDepart : !batchDepart);
+  // Live and idle means the Control Room hasn't started a clip yet — but
+  // retained platform state can arrive first, so the Twin can be sat showing
+  // a crowd while saying "AWAITING START", which reads as a hang. Say what
+  // the operator is actually waiting on.
+  tv.textContent = run.state === 'IDLE' && pipeline.active ? 'AWAITING CLIP'
+                 : run.state === 'IDLE'     ? 'AWAITING START'
+                 : run.state === 'COMPLETE' ? 'RUN COMPLETE'
+                 : held                     ? (pipeline.active ? 'HOLDING — AWAITING CLIP'
+                                                                : 'HOLDING — AWAITING BATCH')
+                 : train.state;
+  tv.classList.toggle('run',  run.state === 'RUNNING');
+  tv.classList.toggle('done', run.state === 'COMPLETE');
+  $('mStation').textContent = run.state === 'IDLE'
+    ? `–/${STATIONS.length}`
+    : `${STATIONS[run.station].id}/${STATIONS.length}`;
+
+  if (uiDirty) {
+    uiDirty = false;
+    paintStrip();
+    zones.forEach(z => {
+      z.$cv.textContent = z.count;
+      z.$sw.style.background = HEX[z.status];
+      z.$sw.style.boxShadow = `0 0 8px ${HEX[z.status]}`;
+      const tr = z.trend === 'rising' ? '▲' : z.trend === 'falling' ? '▼' : '►';
+      // the badge is the coach's state (what the LED says), the arrow is the
+      // queue's trend — the two answer different questions
+      z.$st.textContent = `${tr} ${STATUS_SHORT[z.status]}`;
+      z.$st.style.color = HEX[z.status];
+      z.$st.title = `${comps[z.idx].boarded} aboard + ${z.count} queued = ${z.load}/${CFG.compCapacity}`;
+      z.$cf.textContent = `CONF ${z.confidence}%`;
+      z.$sp.textContent = sparkline(z.hist);
+      if (document.activeElement !== z.$sl) z.$sl.value = z.count;
+    });
+  }
+}
+
+/* --- fps + the quality governor it drives --- */
+let frames = 0, fpsAcc = 0;
+function updateFps(dt) {
+  frames++; fpsAcc += dt;
+  if (fpsAcc >= 0.5) {
+    const fps = Math.round(frames / fpsAcc);
+    $('fpsv').textContent = fps;
+    $('resv').textContent = `${renderer.domElement.width}x${renderer.domElement.height}`;
+    governQuality(fps, fpsAcc);
+    frames = 0; fpsAcc = 0;
+  }
+}
+
+/* Two seconds of sustained slowness costs a quality tier; ten seconds of
+   comfortable headroom earns one back. The asymmetry is the point — dropping
+   quality has to happen fast enough to be worth anything, and raising it has
+   to be slow, or a scene sitting right on the boundary visibly flickers
+   between two looks. The band between 40 and 55 is dead space for exactly
+   the same reason.                                                          */
+let slowFor = 0, fastFor = 0;
+// Set via MP.setQualityTier() — pins a tier so a change can be benchmarked
+// against another build at the same settings, and so a machine that can hold
+// tier 0 can be told to stay there.
+let governorOff = false;
+function governQuality(fps, dt) {
+  // The two thresholds must overlap in the middle, or the band between them
+  // is a trap: dropping below 40 and only recovering above 55 meant anything
+  // that settled at 44fps — a perfectly good frame rate — stayed at reduced
+  // quality forever, with nothing to push it back up. That is exactly how the
+  // Twin ended up stuck rendering at 0.85x. 45 is comfortably inside the drop
+  // threshold's blast radius, so a tier that fixed the problem now earns
+  // itself back.
+  if (fps < 34 && qualityTier < QUALITY_TIERS.length - 1) { slowFor += dt; fastFor = 0; }
+  else if (fps > 45 && qualityTier > 0) { fastFor += dt; slowFor = 0; }
+  else { slowFor = 0; fastFor = 0; }
+
+  if (governorOff) return;
+  if (slowFor > 2) {
+    qualityTier++; slowFor = 0; applyQuality();
+    logLine('sy', `RENDER LOAD HIGH (${fps} FPS) — QUALITY TIER ${qualityTier}`);
+  } else if (fastFor > 6) {
+    qualityTier--; fastFor = 0; applyQuality();
+    logLine('sy', `HEADROOM RECOVERED (${fps} FPS) — QUALITY TIER ${qualityTier}`);
+  }
+}
+
+/* ========================== HISTORY & TRENDS ============================== */
+/* Confidence reads high when recent occupancy readings have been steady, and
+   dips when the count is swinging around a lot — the same kind of
+   stability-based confidence a real computer-vision head would report,
+   without needing an actual model behind it. */
+function zoneConfidence(z) {
+  const h = z.hist;
+  if (h.length < 2) return 90;
+  const mean = h.reduce((s, v) => s + v, 0) / h.length;
+  const variance = h.reduce((s, v) => s + (v - mean) ** 2, 0) / h.length;
+  const volatility = mean > 0 ? Math.sqrt(variance) / mean : Math.sqrt(variance);
+  return clamp(Math.round(99 - volatility * 55), 62, 99);
+}
+
+const SPARK = '▁▂▃▄▅▆▇█';
+function sparkline(arr) {
+  if (!arr.length) return ''.padEnd(CFG.histLen, '▁');
+  const lo = Math.min(...arr), hi = Math.max(...arr), span = hi - lo || 1;
+  return arr.map(v => SPARK[clamp(Math.floor((v - lo) / span * (SPARK.length - 1)), 0, SPARK.length - 1)]).join('');
+}
+
+function sampleHistory() {
+  zones.forEach(z => {
+    z.hist.push(z.count);
+    if (z.hist.length > CFG.histLen) z.hist.shift();
+    if (z.hist.length >= 3) {
+      const h = z.hist, half = Math.floor(h.length / 2);
+      const a = h.slice(0, half).reduce((s, v) => s + v, 0) / half;
+      const b = h.slice(-half).reduce((s, v) => s + v, 0) / half;
+      const d = b - a;
+      z.trend = d > 1.2 ? 'rising' : d < -1.2 ? 'falling' : 'steady';
+    }
+    z.confidence = zoneConfidence(z);
+    paintZoneSprite(z);
+  });
+  uiDirty = true;
+}
+
+/* ============================== LED PULSE ================================= */
+function updateLeds(t) {
+  zones.forEach(z => {
+    const led = z.led;
+    if (z.status === 'high') {
+      const p = 0.5 + 0.5 * Math.sin(t * 4.6);
+      led.glowMat.opacity = 0.26 + p * 0.44;
+      led.stripMat.opacity = 0.78 + p * 0.22;
+      led.light.intensity = 8 + p * 16;
+      led.kerbMat.color.copy(COL.high).multiplyScalar(0.65 + p * 0.55);
+    } else {
+      led.glowMat.opacity = 0.28;
+      led.stripMat.opacity = 1;
+      led.light.intensity = z.status === 'med' ? 9 : 7;
+      led.kerbMat.color.copy(COL[z.status]);
+    }
+  });
+}
+
+/* ================================ LOOP ==================================== */
+let last = performance.now();
+function tick(now) {
+  requestAnimationFrame(tick);
+  let dt = (now - last) / 1000;
+  last = now;
+  // clamped at both ends. The upper bound stops a long stall (a backgrounded
+  // tab, a GC pause) from teleporting everyone a frame later; the lower bound
+  // matters just as much, because a negative dt runs the whole simulation
+  // backwards — watchdog timers unwind and the train can sit in BOARDING
+  // forever instead of ever tripping them.
+  dt = clamp(dt, 0, 0.05);
+  simTime += dt;
+
+  if (run.state === 'RUNNING') run.t += dt;
+
+  histTimer += dt;
+  if (histTimer >= CFG.histEvery) { histTimer = 0; sampleHistory(); }
+
+  reconcileTimer += dt;
+  if (reconcileTimer >= 0.4) {
+    reconcileTimer = 0;
+    zones.forEach(z => reconcile(z, 4));
+  }
+
+  // "stand where it's green" — only while the platform is waiting for a train
+  rebalTimer += dt;
+  if (rebalTimer >= CFG.rebalance) {
+    rebalTimer = 0;
+    if (run.state === 'RUNNING' && (train.state === 'ABSENT' || train.state === 'ARRIVING')
+        && !pendingSpawns.length) {
+      const r = rebalanceQueues();
+      if (r && simTime - rebalLogAt > 4) {
+        rebalLogAt = simTime;
+        logLine('in', `LED REBALANCE — QUEUE SHIFTING ${r.from} → ${r.to}`);
+      }
+    }
+  }
+
+  // The only thing in this scene that casts a moving shadow is the train, so
+  // the frozen shadow map only needs redrawing while it is actually sliding.
+  if (train.state === 'ARRIVING' || train.state === 'DEPARTING') requestShadowUpdate(0.15);
+  key.shadow.needsUpdate = simTime <= shadowHoldUntil;
+
+  updateTrain(dt);
+  updateAgents(dt);
+  updateCharacters(dt);
+  updateCoachFigures(dt);
+  updateLeds(simTime);
+  updateHUD(dt);
+  updateBanner();
+  updateCut();
+  updateFps(dt);
+
+  controls.update();
+  composer.render();
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  // one owner for renderer size, composer size and the bloom buffer — sizing
+  // them here independently is how the bloom pass silently went back to full
+  // resolution (composer.setSize resets every pass) and cost four times what
+  // it was meant to
+  applyQuality();
+});
+
+/* ============================== BOOTSTRAP ================================= */
+// one owner for renderer/composer/bloom sizing from the very first frame, so
+// tier 0's numbers are what actually got applied rather than something close
+applyQuality();
+
+// The broker link comes up straight away and stays up, so the passenger app is
+// fed in both modes. It does NOT put the Twin under Control Room control —
+// that is what GO LIVE is for. A broker that isn't running is not an error
+// here; mqtt.js retries and the label says so.
+try { mqttConnect(); } catch (e) { logLine('sy', `MQTT CONNECT FAILED — ${e.message || e}`); }
+
+/* The passenger app's feed must not depend on this tab being LOOKED AT.
+   publishTwinState() is also called from updateHUD, which runs off the render
+   loop — and a browser stops requestAnimationFrame entirely in a background
+   tab, so an operator who switched to another window silently stopped feeding
+   the app and it sat on the last retained message looking frozen. A timer
+   keeps going (throttled to about 1Hz in the background, which is plenty for
+   this), so the app stays current whether anyone is watching the Twin or not. */
+setInterval(() => publishTwinState(false), 1000);
+refreshAllZones();
+paintStationSigns();
+updateCompUI();
+paintStrip();
+syncButtons();
+fillTimeInputs();
+
+logLine('sy', 'FEED ONLINE — CAM_12_STATION_1');
+logLine('sy', `COACH CAPACITY ${CFG.compCapacity} — FILLING ≥${Math.round(CFG.compCapacity*CFG.compMedFrac)}  FULL ≥${Math.round(CFG.compCapacity*CFG.compHighFrac)}`);
+logLine('sy', `${STATIONS.length} STATIONS ON THE LINE — PRESS START RUN, OR GO LIVE`);
+sampleHistory();
+
+$('boot').remove();
+requestAnimationFrame(tick);
+
+// small debug handle (handy for tweaking the framing live in devtools)
+window.MP = { scene, camera, controls, renderer, zones, comps, train, key, CFG, run, STATIONS, agents,
+              pipeline, pendingSpawns, queueArrivals, startBoarding, startRun, resetAll, alightAt,
+              rebalanceQueues, boardingDone, alightingDone, pickZone, anyEntering,
+              compLoad, bestCoach, setZoneQueueLive, applyLiveOccupancy, noteClipStarted,
+              requestDepart, applySimTime, istParts,
+              batchDepart: () => batchDepart,
+              // pin the render quality; null hands it back to the governor
+              setQualityTier: t => {
+                governorOff = t !== null;
+                if (t !== null) qualityTier = clamp(t, 0, QUALITY_TIERS.length - 1);
+                slowFor = fastFor = 0;
+                applyQuality();
+                return { tier: qualityTier, governor: governorOff ? 'off' : 'on' };
+              },
+              QUALITY_TIERS,
+              // lets the run be stepped from the console when rAF is throttled
+              // (a background tab renders nothing, so the sim would sit frozen)
+              tick };
+</script>
+
+<script>
+  // If loading genuinely stalls (offline, or a slow first-time parse of the
+  // character models), say so rather than leaving a spinner up forever.
+  // This is generous on purpose: the crowd's five character models carry a
+  // couple dozen animation clips each that the browser has to decode even
+  // though only two per model are ever played, so a slow machine's first
+  // load can legitimately take a while.
+  setTimeout(() => {
+    const b = document.getElementById('boot');
+    if (b) {
+      b.classList.add('err');
+      b.innerHTML = '<div>FEED UNAVAILABLE</div><div style="letter-spacing:.06em;font-size:10px;max-width:420px;text-align:center;line-height:1.7">Still loading after 30s — check the internet connection (or that this file\'s <b>models/</b> folder is intact) and reload.</div>';
+    }
+  }, 30000);
+</script>

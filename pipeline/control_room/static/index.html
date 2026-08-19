@@ -1,0 +1,378 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MetroPulse Control Room</title>
+
+<style>
+  :root{
+    --bg:#070a0e;
+    --panel:rgba(11,16,22,.88);
+    --panel-solid:#0b1016;
+    --line:rgba(120,175,205,.18);
+    --line-hot:rgba(120,175,205,.32);
+    --txt:#c9d8e4;
+    --dim:#6a8195;
+    --dimmer:#47586a;
+    --low:#2ee27a;
+    --med:#ffb020;
+    --high:#ff3b4a;
+    --accent:#5fb8ff;
+    --mono:"JetBrains Mono","SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--txt);
+    font-family:var(--mono);font-size:13px;-webkit-font-smoothing:antialiased}
+
+  #topbar{display:flex;align-items:stretch;gap:1px;background:var(--line);
+    border-bottom:1px solid var(--line-hot)}
+  #topbar .cell{background:var(--panel-solid);padding:10px 18px}
+  #topbar .cell.title{flex:1;display:flex;flex-direction:column;justify-content:center}
+  #topbar .title .n{font-size:15px;letter-spacing:.14em;color:#eaf4fb}
+  #topbar .title .s{font-size:9px;letter-spacing:.16em;color:var(--dimmer);margin-top:2px}
+  #topbar .k{font-size:9px;letter-spacing:.16em;color:var(--dim)}
+  #topbar .v{font-size:17px;color:#eaf4fb;font-variant-numeric:tabular-nums;margin-top:2px}
+  #topbar .v.on{color:var(--low)}
+  #topbar .v.off{color:var(--dimmer)}
+  #topbar .v.err{color:var(--high);font-size:13px}
+
+  #wrap{display:flex;height:calc(100% - 57px)}
+
+  #main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:#050709;padding:20px;gap:14px;min-width:0}
+  #frame{max-width:100%;max-height:100%;border:1px solid var(--line-hot);background:#000;
+    display:none}
+  #placeholder{color:var(--dimmer);font-size:12px;letter-spacing:.1em;text-align:center;line-height:1.8}
+
+  #panel{width:300px;flex:none;background:var(--panel);border-left:1px solid var(--line-hot);
+    display:flex;flex-direction:column;overflow-y:auto}
+  #panel .head{padding:10px 14px;border-bottom:1px solid var(--line);
+    font-size:10.5px;letter-spacing:.15em;color:#dcecf6;background:rgba(255,255,255,.025)}
+  #panel .body{padding:14px}
+
+  .sect{font-size:9px;letter-spacing:.18em;color:var(--dimmer);margin:0 0 8px}
+  .sect.mt{margin-top:18px}
+
+  #dropzone{border:1px dashed var(--line-hot);padding:18px 10px;text-align:center;cursor:pointer;
+    font-size:10.5px;letter-spacing:.08em;color:var(--dim);transition:.15s}
+  #dropzone:hover{border-color:var(--accent);color:var(--accent)}
+  #fileInput{display:none}
+
+  button{width:100%;background:#12202b;border:1px solid #26414f;color:#cfe4f2;font-family:var(--mono);
+    font-size:11px;letter-spacing:.1em;padding:9px 6px;cursor:pointer;margin-top:8px}
+  button:hover{background:#1b3243;border-color:#3d6d87;color:#fff}
+  button.danger{background:#3a1418;border-color:#7a2028;color:#ffb0b6}
+  button.danger:hover{background:#4d1a20;border-color:#ff3b4a;color:#ffd6da}
+  button:disabled{opacity:.35;cursor:not-allowed}
+
+  .zrow{margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;
+    padding:8px 10px;background:#0d141b;border:1px solid #1c2830}
+  .zrow .nm{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.08em}
+  .zrow .nm i{display:inline-block;width:9px;height:9px;border-radius:2px}
+  .zrow .cv{font-size:15px;font-variant-numeric:tabular-nums}
+
+  .stat{display:flex;justify-content:space-between;margin-bottom:7px;font-size:11px}
+  .stat .k{color:var(--dim);letter-spacing:.08em}
+  .stat .v{color:#eaf4fb;font-variant-numeric:tabular-nums}
+
+  #srcName{font-size:10px;color:var(--dimmer);word-break:break-all;margin-top:10px;line-height:1.5}
+
+  .fld{display:flex;gap:7px}
+  input[type=date],input[type=number]{background:#0d141b;border:1px solid #24343f;color:#eaf4fb;
+    font-family:var(--mono);font-size:12px;padding:7px 8px;min-width:0}
+  input[type=date]{flex:1.4}
+  input[type=number]{flex:1;-moz-appearance:textfield}
+  input[type=date]:focus,input[type=number]:focus{outline:none;border-color:var(--accent)}
+  #predResult{margin-top:9px;font-size:11px;line-height:1.6;min-height:1.6em}
+  #predResult b{letter-spacing:.08em}
+
+  #note{padding:8px 14px;font-size:9px;letter-spacing:.1em;color:#5a7183;text-align:center;
+    border-top:1px solid var(--line)}
+</style>
+
+<div id="topbar">
+  <div class="cell title"><span class="n">METROPULSE</span><span class="s">CONTROL ROOM</span></div>
+  <div class="cell"><div class="k">MQTT</div><div class="v" id="mqttState">--</div></div>
+  <div class="cell"><div class="k">SOURCE</div><div class="v" id="runState">IDLE</div></div>
+  <div class="cell"><div class="k">SIM CLOCK · IST</div><div class="v" id="simClock">--:--:--</div></div>
+</div>
+
+<div id="wrap">
+  <div id="main">
+    <img id="frame" alt="live processed frame" />
+    <div id="placeholder">NO VIDEO LOADED<br />LOAD A CLIP TO START PROCESSING</div>
+  </div>
+
+  <div id="panel">
+    <div class="head">CONTROL ROOM CONSOLE</div>
+    <div class="body">
+      <div class="sect">SOURCE</div>
+      <div id="dropzone">CLICK TO LOAD A VIDEO<br /><span style="color:var(--dimmer)">mp4 / avi / mov / webcam-recorded clips</span></div>
+      <input type="file" id="fileInput" accept="video/*" />
+      <button class="danger" id="btnStop" disabled>■ STOP &amp; SEND TRAIN</button>
+      <div id="srcName"></div>
+
+      <div class="sect mt">PLATFORM QUEUE PER COACH (MCNN)</div>
+      <div id="zctl"></div>
+
+      <div class="sect mt">GATE COUNT (LINE-CROSSING)</div>
+      <div class="stat"><span class="k">ENTERED</span><span class="v" id="stEntered">0</span></div>
+      <div class="stat"><span class="k">EXITED</span><span class="v" id="stExited">0</span></div>
+
+      <div class="sect mt">COMPARTMENT LOAD — ABOARD + QUEUED</div>
+      <div id="occList"></div>
+      <button class="danger" id="btnResetOcc">RESET OCCUPANCY</button>
+
+      <div class="sect mt">SIMULATED TIME (IST)</div>
+      <div class="fld">
+        <input type="date" id="predDate" />
+        <input type="number" id="predHour" min="0" max="23" placeholder="HR" />
+      </div>
+      <button id="btnNowIST">↻ USE CURRENT IST</button>
+      <button id="btnPredict">CHANGE TIME</button>
+      <div id="predResult"></div>
+    </div>
+    <div id="note">SAME MQTT CONTRACT AS THE TWIN — SEE pipeline/docs/mqtt_contract.md</div>
+  </div>
+</div>
+
+<script>
+const HEX = { low:'#2ee27a', med:'#ffb020', high:'#ff3b4a' };
+const ZONES = ['A', 'B', 'C'];
+const COMP_CAPACITY = 30; // matches CFG.compCapacity in MetroPulse 0/index.html
+const $ = id => document.getElementById(id);
+
+const zctl = $('zctl');
+const zoneEls = {};
+ZONES.forEach(z => {
+  const row = document.createElement('div');
+  row.className = 'zrow';
+  row.innerHTML = `<span class="nm"><i id="sw${z}"></i>COACH ${ZONES.indexOf(z) + 1}<span style="color:var(--dimmer)">· ZONE ${z}</span></span><span class="cv" id="cv${z}">0</span>`;
+  zctl.appendChild(row);
+  zoneEls[z] = { sw: $('sw' + z), cv: $('cv' + z) };
+});
+
+const frameEl = $('frame');
+const placeholderEl = $('placeholder');
+const dropzone = $('dropzone');
+const fileInput = $('fileInput');
+const btnStop = $('btnStop');
+
+let statsSource = null;
+
+/* The preview is one long-lived MJPEG connection, attached once. Polling
+   /api/frame.jpg every 400ms showed 2.5 frames a second, so a 230-frame clip
+   the server played correctly at 30fps arrived as ~19 stills and looked like
+   it was racing past.
+
+   Visibility is driven by the stats feed's `has_frame`, not by the <img>
+   load event: a multipart stream does not fire load per frame, so waiting on
+   it left the panel stuck on "WAITING FOR FIRST FRAME" forever while frames
+   were arriving perfectly well underneath. */
+let streamAttached = false;
+
+function showStream(hasFrame, phase, sourceName) {
+  if (hasFrame && !streamAttached) {
+    // (re)attach on the first frame of each clip — an <img> holds its last
+    // decoded frame indefinitely, so a stream left attached across clips would
+    // keep the previous station on screen
+    streamAttached = true;
+    frameEl.src = '/api/stream.mjpg?t=' + Date.now();
+  } else if (!hasFrame) {
+    streamAttached = false;
+    frameEl.removeAttribute('src');
+  }
+  frameEl.style.display = hasFrame ? 'block' : 'none';
+  placeholderEl.style.display = hasFrame ? 'none' : 'block';
+  if (hasFrame) return;
+  placeholderEl.innerHTML = phase === 'reading'
+    ? 'READING THE PLATFORM…'
+    : sourceName
+      ? `SERVICE DEPARTED<br /><span style="color:var(--dimmer)">PLATFORM CLEARED — LOAD THE NEXT STATION'S CLIP</span>`
+      : 'NO VIDEO LOADED<br />LOAD A CLIP TO START PROCESSING';
+}
+
+function showError(msg) {
+  frameEl.style.display = 'none';
+  placeholderEl.style.display = 'block';
+  placeholderEl.innerHTML = `<span style="color:var(--high)">COULD NOT READ THIS VIDEO</span>`
+    + `<br /><span style="color:var(--dimmer)">${msg}</span>`;
+}
+
+function startStatsStream() {
+  if (statsSource) return;
+  statsSource = new EventSource('/api/stream');
+  statsSource.onmessage = e => applyStats(JSON.parse(e.data));
+  // this is the stats stream dropping, which is a different thing again from
+  // the broker being down — say which one
+  statsSource.onerror = () => {
+    $('mqttState').textContent = 'NO SERVER';
+    $('mqttState').className = 'v err';
+    $('mqttState').title = 'lost the connection to the Control Room server itself';
+  };
+}
+
+function applyStats(s) {
+  /* This cell used to read LIVE the moment a stats frame arrived, which is a
+     statement about the browser's own SSE connection to this server — a
+     completely different link from the one it is labelled MQTT. With mosquitto
+     down the console sat there saying MQTT LIVE while nothing it published was
+     reaching the Twin or the decision engine, which is the single most
+     misleading thing a status light can do. The server now reports what paho
+     actually thinks (see state["mqtt_connected"]) and this shows that. */
+  const brokerUp = s.mqtt_connected !== false;
+  $('mqttState').textContent = brokerUp ? 'LIVE' : 'BROKER DOWN';
+  $('mqttState').className = brokerUp ? 'v on' : 'v err';
+  $('mqttState').title = brokerUp
+    ? 'connected to mosquitto on localhost:1883'
+    : 'the Control Room cannot reach the broker — nothing is reaching the Twin. '
+      + 'start it with: docker compose -f pipeline/mqtt/docker-compose.yml up -d';
+
+  const phase = s.phase || (s.running ? 'playing' : 'idle');
+  $('runState').textContent = phase === 'reading'  ? 'READING PLATFORM'
+                            : phase === 'playing'  ? 'PLAYING'
+                            : phase === 'departed' ? 'DEPARTED'
+                            : (s.source_name ? 'STOPPED' : 'IDLE');
+  $('runState').className = phase === 'idle' ? 'v' : 'v on';
+  $('srcName').textContent = s.source_name ? ('LOADED: ' + s.source_name) : '';
+  btnStop.disabled = !s.running;
+
+  ZONES.forEach(z => {
+    const hex = HEX[s.zone_status[z]] || HEX.low;
+    zoneEls[z].cv.textContent = s.zone_counts[z];
+    zoneEls[z].cv.style.color = hex;
+    zoneEls[z].sw.style.background = hex;
+  });
+  $('stEntered').textContent = s.entered_total;
+  $('stExited').textContent = s.exited_total;
+
+  // Same figure the Twin's LEDs are showing: who is already in that
+  // compartment plus who is queued at its doors, against coach capacity.
+  // Occupancy alone told an operator nothing about where the crowd on this
+  // platform is about to end up.
+  if (s.compartment_occupancy) {
+    $('occList').innerHTML = ZONES.map((z, i) => {
+      const aboard = s.compartment_occupancy[z] ?? 0;
+      const queued = s.zone_counts[z] ?? 0;
+      const load = aboard + queued;
+      const frac = load / COMP_CAPACITY;
+      const hex = frac < 0.55 ? HEX.low : frac < 0.9 ? HEX.med : HEX.high;
+      // A projected load over capacity is real information, not a glitch: it
+      // is the queue this coach cannot take. Flag the overflow rather than
+      // printing a bare number that looks like broken arithmetic.
+      const over = load > COMP_CAPACITY ? ` +${load - COMP_CAPACITY} OVER` : '';
+      return `<div class="stat"><span class="k">COACH ${i + 1} (ZONE ${z})</span>`
+           + `<span class="v" style="color:${hex}" title="${aboard} aboard + ${queued} queued at these doors">`
+           + `${load}<span style="color:var(--dimmer)">/${COMP_CAPACITY}${over}</span></span></div>`;
+    }).join('');
+  }
+
+  // the Twin may have moved the shared clock — follow it, but never yank the
+  // inputs out from under an operator who is mid-edit
+  if (typeof s.sim_offset_ms === 'number' && s.sim_offset_ms !== simOffsetMs) {
+    simOffsetMs = s.sim_offset_ms;
+    tickClock();
+    if (!inputsTouched) fillFromSimClock();
+  }
+
+  if (s.error) showError(s.error); else showStream(!!s.has_frame, phase, s.source_name);
+}
+
+dropzone.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  const form = new FormData();
+  form.append('video', file);
+  dropzone.textContent = 'UPLOADING…';
+  await fetch('/api/load', { method: 'POST', body: form });
+  dropzone.innerHTML = 'CLICK TO LOAD A DIFFERENT VIDEO';
+  startStatsStream();
+});
+
+btnStop.addEventListener('click', async () => {
+  btnStop.disabled = true;
+  await fetch('/api/stop', { method: 'POST' });
+});
+
+$('btnResetOcc').addEventListener('click', async () => {
+  await fetch('/api/reset-occupancy', { method: 'POST' });
+});
+
+const predDate = $('predDate');
+const predHour = $('predHour');
+const predResult = $('predResult');
+
+/* The simulated clock is shared state, not this console's private setting —
+   the Twin can move it too, and the server mirrors whichever end did (see
+   control/time in mqtt_contract.md). `simOffsetMs` arrives with every stats
+   frame; the clock below ticks locally off it so it stays smooth between
+   frames instead of jumping twice a second.
+
+   This machine's own timezone is whatever it happens to be set to and is
+   irrelevant to a Bangalore system — every time shown here is IST. */
+const IST_PARTS = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+});
+
+let simOffsetMs = 0;
+let inputsTouched = false;   // don't overwrite a date the operator is typing
+
+function istParts(ms = Date.now() + simOffsetMs) {
+  const out = {};
+  for (const p of IST_PARTS.formatToParts(new Date(ms))) out[p.type] = p.value;
+  return out;
+}
+
+function tickClock() {
+  const p = istParts();
+  $('simClock').textContent = `${p.hour}:${p.minute}:${p.second}`;
+  $('simClock').className = Math.abs(simOffsetMs) < 60000 ? 'v' : 'v on';
+  $('simClock').title = `${p.year}-${p.month}-${p.day} — ` +
+    (Math.abs(simOffsetMs) < 60000 ? 'real IST' : 'simulated, shared with the Twin');
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+function fillFromSimClock() {
+  const p = istParts();
+  predDate.value = `${p.year}-${p.month}-${p.day}`;
+  predHour.value = String(Number(p.hour));
+}
+fillFromSimClock();
+
+predDate.addEventListener('input', () => { inputsTouched = true; });
+predHour.addEventListener('input', () => { inputsTouched = true; });
+
+$('btnNowIST').addEventListener('click', async () => {
+  inputsTouched = false;
+  simOffsetMs = 0;
+  fillFromSimClock();
+  tickClock();
+  // push it so the Twin comes back to real time too, rather than the two
+  // consoles quietly disagreeing about what time it is
+  await changeTime(predDate.value, +predHour.value);
+});
+
+async function changeTime(date, hour) {
+  predResult.textContent = 'CHANGING…';
+  const res = await fetch('/api/change-time', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date, hour })
+  });
+  if (!res.ok) { predResult.textContent = 'ERROR — CHECK DATE/HOUR'; return; }
+  const { expected_level, reason } = await res.json();
+  const hex = HEX[expected_level] || '#fff';
+  predResult.innerHTML = `TWIN CLOCK SET TO ${date} ${String(hour).padStart(2, '0')}:00 IST<br />`
+    + `<b style="color:${hex}">${expected_level.toUpperCase()}</b> predicted<br /><span style="color:var(--dim)">${reason}</span>`;
+}
+
+$('btnPredict').addEventListener('click', () => {
+  if (!predDate.value) return;
+  inputsTouched = false;
+  changeTime(predDate.value, +predHour.value);
+});
+
+startStatsStream();
+</script>
