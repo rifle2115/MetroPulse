@@ -246,7 +246,7 @@ soft, the machine is genuinely struggling.
 ## Data sources
 
 - all the zip files with metro platform pictures: [datasets](https://drive.google.com/drive/folders/1xPWSjukaV9iDZ3spMJomhgL1OxtiEHq-)
-- wuhan metro crowd with images and pictures: [datasets](https://drive.google.com/file/d/1ORvmQWTRrVWCNWKDczAud7078kPtJkVE/view)
+- wuhan metro crowd with images and videos: [dataset](https://drive.google.com/file/d/1ORvmQWTRrVWCNWKDczAud7078kPtJkVE/view)
 
 ---
 
