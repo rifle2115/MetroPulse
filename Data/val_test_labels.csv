@@ -1,0 +1,29 @@
+video,camera,split,arrive_s,doors_open_s,doors_close_s,depart_s,notes
+val_1.mp4,val1,val,0.0,0.0,0.0,1.0,the train is leaving while the clip start
+val_1.mp4,val1,val,11.0,14.0,18.0,22.0,
+val_1.mp4,val1,val,27.0,29.0,31.0,35.0,
+val_1.mp4,val1,val,48.0,50.0,55.0,60.0,
+val_3.mp4,val3,val,4.0,6.0,9.0,11.0,
+val_3.mp4,val3,val,37.0,38.0,40.0,42.0,
+val_9.mp4,val9,val,0.0,0.0,7.0,10.0,the clip starts with train already arrived and doors already opened
+val_9.mp4,val9,val,31.0,33.0,39.0,43.0,
+val_10.mp4,vL10,val,0.0,0.0,4.0,7.0,the clip starts with train already arrived and doors already opened
+val_10.mp4,vL10,val,20.0,24.0,29.0,30.0,
+val_11.mp4,val11,val,11.0,13.0,17.0,21.0,
+val_12.mp4,val12,val,0.0,1.0,4.0,7.0,the clip starts with train already arrived
+val_12.mp4,val12,val,26.0,27.0,31.0,34.0,
+val_12.mp4,val12,val,50.0,51.0,55.0,58.0,
+test_01.mp4,test1,test,2.0,4.0,11.0,14.0,
+test_01.mp4,test1,test,33.0,35.0,43.0,46.0,
+test_01.mp4,test1,test,69.0,72.0,81.0,85.0,
+test_01.mp4,test1,test,108.0,109.0,117.0,,the clip ends before the train leaves
+test_02.mp4,test2,test,14.0,15.0,20.0,21.0,
+test_02.mp4,test2,test,40.0,42.0,46.0,,CHECK: no depart time given — assumed the clip ends before the train leaves
+test_7.mp4,test7,test,0.0,0.0,6.0,7.0,the clip starts after the train has arrived and the doors are opened
+test_13.mp4,test13,test,,,,,no train
+test_14.mp4,test14,test,41.0,42.0,46.0,50.0,
+test_15.mp4,test15,test,0.0,0.0,0.5,0.8,
+test_16.mp4,test16,test,0.0,0.0,2.0,4.0,
+test_16.mp4,test16,test,21.0,23.0,26.0,,CHECK: depart was 26.0 but the note said the clip ends before the train leaves — set to empty
+test_18.mp4,test18,test,12.0,14.0,18.0,21.0,
+test_20.mp4,test20,test,20.0,21.0,26.0,28.0,its not very visible when the train arrives and leaves

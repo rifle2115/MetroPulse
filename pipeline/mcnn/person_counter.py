@@ -27,10 +27,11 @@ boxes where tiles cut bodies in half. So the tuning here is not "turn it up
 until the number looks big" — past this point extra detections are false
 positives, not recovered people.
 
-Known limit: the zones are thirds of the whole frame, so a detection inside
-the carriage or on the far platform still counts toward that zone. Restricting
-each zone to a polygon over the platform waiting area is the fix, and it needs
-per-camera calibration.
+Zones. Without a calibration the zones are thirds of the whole frame, so a
+detection inside the carriage or on the far platform still counts toward that
+zone. With one (camera_calibration.py — the operator marks the platform and
+the coach seams once per camera) each person is placed by where their feet
+are on the platform floor, and anyone off the marked platform is not counted.
 
 There is no tracking here. There used to be — a centroid tracker and a
 line-crossing counter — but boarding is now measured as the change in platform
@@ -53,6 +54,15 @@ TILE_IMG_SIZE = 960     # inference size per tile
 CONF = 0.12             # a real person at the far end of this platform scores
                         # 0.15-0.2; the stock 0.25 drops half the platform
 NMS_IOU = 0.55
+# A box cut off by a tile's edge is a fragment of someone (head-and-shoulders
+# from the tile above, legs from the tile below). It sits inside that person's
+# full box, so IoU against it stays low and plain NMS keeps both — measured on
+# the Hankou footage as 6 people counted for 3 on the platform, with half-body
+# boxes starting exactly on the tile seams. A fragment mostly inside another box
+# is dropped. Only fragments: two whole people overlapping in a crowd are both
+# kept, however much one hides the other.
+FRAGMENT_IOS = 0.6      # intersection over the fragment's own area
+EDGE_PX = 3             # a box within this of an inner tile edge was cut by it
 PERSON_CLASS = 0        # COCO "person"
 
 
@@ -64,27 +74,39 @@ def _zone_of_x(x: float, w: int) -> str:
     return "C"
 
 
-def _nms(boxes: list, scores: list, iou_thr: float = NMS_IOU) -> list:
-    """Standard greedy NMS, needed because overlapping tiles deliberately show
-    the same person to more than one tile."""
+def _nms(boxes: list, scores: list, clipped: list | None = None,
+         iou_thr: float = NMS_IOU, frag_ios: float = FRAGMENT_IOS) -> list:
+    """Greedy NMS, needed because overlapping tiles deliberately show the same
+    person to more than one tile.
+
+    Whole boxes go first, ahead of any tile-cut fragment whatever their
+    scores: a fragment kept in place of the full box would still count one
+    person, but its bottom edge is the tile seam rather than their feet, and
+    the feet are what place them on the platform. Then a fragment is
+    suppressed by IoU as usual, or by lying mostly inside a box already kept
+    (see FRAGMENT_IOS)."""
     if not boxes:
         return []
     b = np.asarray(boxes, dtype=np.float32)
     s = np.asarray(scores, dtype=np.float32)
+    cut = np.asarray(clipped if clipped is not None else [False] * len(boxes), dtype=bool)
     x1, y1, x2, y2 = b[:, 0], b[:, 1], b[:, 2], b[:, 3]
     area = (x2 - x1) * (y2 - y1)
-    order = s.argsort()[::-1]
+    order = np.lexsort((-s, cut))      # whole before cut, then by score
     keep = []
     while order.size:
         i = order[0]
         keep.append(int(i))
-        xx1 = np.maximum(x1[i], x1[order[1:]])
-        yy1 = np.maximum(y1[i], y1[order[1:]])
-        xx2 = np.minimum(x2[i], x2[order[1:]])
-        yy2 = np.minimum(y2[i], y2[order[1:]])
+        rest = order[1:]
+        xx1 = np.maximum(x1[i], x1[rest])
+        yy1 = np.maximum(y1[i], y1[rest])
+        xx2 = np.minimum(x2[i], x2[rest])
+        yy2 = np.minimum(y2[i], y2[rest])
         inter = np.maximum(0.0, xx2 - xx1) * np.maximum(0.0, yy2 - yy1)
-        iou = inter / (area[i] + area[order[1:]] - inter + 1e-9)
-        order = order[1:][iou < iou_thr]
+        iou = inter / (area[i] + area[rest] - inter + 1e-9)
+        inside = inter / (area[rest] + 1e-9)
+        drop = (iou >= iou_thr) | (cut[rest] & (inside >= frag_ios))
+        order = rest[~drop]
     return keep
 
 
@@ -95,7 +117,7 @@ class PersonCounter:
 
     def __init__(self, model_name: str = MODEL_NAME, grid: tuple = TILE_GRID,
                  overlap: float = TILE_OVERLAP, imgsz: int = TILE_IMG_SIZE,
-                 conf: float = CONF):
+                 conf: float = CONF, calibration=None):
         from ultralytics import YOLO   # imported here so this module is cheap to import
 
         self.model = YOLO(model_name)
@@ -103,9 +125,14 @@ class PersonCounter:
         self.overlap = overlap
         self.imgsz = imgsz
         self.conf = conf
+        # camera_calibration.CameraCalibration, or None for the frame-thirds split
+        self.calibration = calibration
 
         self.zone_people = {z: 0 for z in ZONE_IDS}
-        self.people_total = 0
+        self.people_total = 0          # people counted towards a coach
+        self.detected_total = 0        # every person the detector found
+        self.off_platform = 0          # found, but outside the marked platform
+        self.box_zones: list = []      # coach per box, None = not counted
         self.boxes = np.empty((0, 4), dtype=np.float32)
         self.scores = np.empty((0,), dtype=np.float32)
         # resolution the boxes were measured at, so draw_overlay can rescale
@@ -130,7 +157,7 @@ class PersonCounter:
                 panes.append((max(0, ix * tw - ox), max(0, iy * th - oy),
                               min(w, (ix + 1) * tw + ox), min(h, (iy + 1) * th + oy)))
 
-        boxes, scores = [], []
+        boxes, scores, clipped = [], [], []
         for (x0, y0, x1, y1) in panes:
             pane = frame[y0:y1, x0:x1]
             if pane.size == 0:
@@ -139,11 +166,18 @@ class PersonCounter:
                                      imgsz=self.imgsz, verbose=False)[0]
             if res.boxes is None or len(res.boxes) == 0:
                 continue
+            pw, ph = x1 - x0, y1 - y0
             for bb, sc in zip(res.boxes.xyxy.cpu().numpy(), res.boxes.conf.cpu().numpy()):
                 boxes.append([bb[0] + x0, bb[1] + y0, bb[2] + x0, bb[3] + y0])
                 scores.append(float(sc))
+                # touching a pane edge that is inside the frame means the tile
+                # cut this person off; the frame's own edges don't count, since
+                # the whole-frame pass is cut there too and that's just the shot
+                clipped.append(bool(
+                    (bb[0] <= EDGE_PX and x0 > 0) or (bb[1] <= EDGE_PX and y0 > 0)
+                    or (bb[2] >= pw - EDGE_PX and x1 < w) or (bb[3] >= ph - EDGE_PX and y1 < h)))
 
-        keep = _nms(boxes, scores)
+        keep = _nms(boxes, scores, clipped)
         if not keep:
             return np.empty((0, 4), dtype=np.float32), np.empty((0,), dtype=np.float32)
         return (np.asarray([boxes[i] for i in keep], dtype=np.float32),
@@ -158,12 +192,22 @@ class PersonCounter:
         # feet, not box centre: someone's ground position is what puts them in
         # a zone, and for a camera looking down at an angle the two differ by
         # most of a body
-        counts = {z: 0 for z in ZONE_IDS}
-        for x1, _y1, x2, y2 in self.boxes:
-            counts[_zone_of_x((x1 + x2) / 2.0, w)] += 1
+        feet = [((x1 + x2) / 2.0, float(y2)) for x1, _y1, x2, y2 in self.boxes]
+        if self.calibration is None:
+            zones = [_zone_of_x(fx, w) for fx, _fy in feet]
+        else:
+            zones = self.calibration.zones_for_points(feet, w, h)
 
+        counts = {z: 0 for z in ZONE_IDS}
+        for z in zones:
+            if z is not None:
+                counts[z] += 1
+
+        self.box_zones = zones
         self.zone_people = counts
-        self.people_total = int(len(self.boxes))
+        self.detected_total = int(len(self.boxes))
+        self.people_total = sum(counts.values())
+        self.off_platform = self.detected_total - self.people_total
         return counts
 
     def draw_overlay(self, frame: np.ndarray) -> np.ndarray:
@@ -174,11 +218,24 @@ class PersonCounter:
         sx = w / float(self._src_w) if self._src_w else 1.0
         sy = h / float(self._src_h) if self._src_h else 1.0
 
-        for (x1, y1, x2, y2), sc in zip(self.boxes, self.scores):
-            col = (0, 230, 0) if sc >= 0.25 else (0, 165, 255)
-            cv2.rectangle(out, (int(x1 * sx), int(y1 * sy)), (int(x2 * sx), int(y2 * sy)), col, 2)
+        for i, ((x1, y1, x2, y2), sc) in enumerate(zip(self.boxes, self.scores)):
+            counted = i >= len(self.box_zones) or self.box_zones[i] is not None
+            if counted:
+                col = (0, 230, 0) if sc >= 0.25 else (0, 165, 255)
+                cv2.rectangle(out, (int(x1 * sx), int(y1 * sy)), (int(x2 * sx), int(y2 * sy)), col, 2)
+            else:
+                # found but not on this platform — shown so the operator can
+                # see the calibration excluding them, not silently dropped
+                cv2.rectangle(out, (int(x1 * sx), int(y1 * sy)), (int(x2 * sx), int(y2 * sy)),
+                              (130, 130, 130), 1)
+            # the point that decides the coach
+            cv2.circle(out, (int((x1 + x2) / 2 * sx), int(y2 * sy)), 3,
+                       (0, 230, 0) if counted else (130, 130, 130), -1)
 
-        cv2.putText(out, f"PEOPLE {self.people_total}", (12, 28),
+        title = f"PEOPLE {self.people_total}"
+        if self.off_platform:
+            title += f"  (+{self.off_platform} off platform)"
+        cv2.putText(out, title, (12, 28),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
         cv2.putText(out, "  ".join(f"{z}:{self.zone_people[z]}" for z in ZONE_IDS), (12, 54),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 220, 255), 1, cv2.LINE_AA)

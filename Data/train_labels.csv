@@ -1,0 +1,37 @@
+video,camera,split,arrive_s,doors_open_s,doors_close_s,depart_s,notes
+train_1.mp4,1,train,0.0,2.0,7.0,9.0,clip starts with train already in
+train_1.mp4,1,train,21.0,23.0,29.0,31.0,
+train_1.mp4,1,train,45.0,48.0,55.0,58.0,
+train_1.mp4,1,train,70.0,74.0,79.0,,clip ends before it leaves
+train_2.mp4,2,train,12.0,14.0,18.0,23.0,
+train_2.mp4,2,train,26.0,29.0,32.0,35.0,
+train_2.mp4,2,train,48.0,50.0,54.0,60.0,
+train_3.mp4,3,train,11.0,13.0,18.0,23.0,
+train_3.mp4,3,train,27.0,29.0,32.0,36.0,
+train_3.mp4,3,train,48.0,50.0,55.0,60.0,
+train_5.mp4,5,train,24.0,26.0,31.0,34.0,train is not visible but can be detected using the awarness lights
+train_6.mp4,6,train,24.0,26.0,33.0,35.0,train is not visible but can be detected using the awarness lights
+train_7.mp4,7,train,7.0,9.0,13.0,16.0,
+train_7.mp4,7,train,31.0,33.0,37.0,40.0,
+train_7.mp4,7,train,48.0,50.0,53.0,57.0,
+train_8.mp4,8,train,0.0,0.0,3.0,8.0,clip starts after the train arrives
+train_10.mp4,10,train,0.0,1.0,6.0,9.0,
+train_10.mp4,10,train,23.0,24.0,28.0,31.0,
+train_10.mp4,10,train,42.0,44.0,46.0,48.0,
+train_10.mp4,10,train,66.0,68.0,72.0,75.0,
+train_10.mp4,10,train,90.0,91.0,94.0,99.0,
+train_10.mp4,10,train,112.0,113.0,117.0,120.0,
+train_34.mp4,34,train,18.0,20.0,24.0,28.0,
+train_34.mp4,34,train,54.0,56.0,60.0,,clip ends before the train leaves
+train_35.mp4,35,train,26.0,28.0,31.0,34.0,
+train_35.mp4,35,train,67.0,69.0,73.0,77.0,
+train_35.mp4,35,train,107.0,110.0,113.0,116.0,
+train_35.mp4,35,train,148.0,151.0,155.0,160.0,
+train_35.mp4,35,train,188.0,191.0,195.0,200.0,
+train_35.mp4,35,train,235.0,238.0,241.0,245.0,
+train_35.mp4,35,train,268.0,271.0,275.0,280.0,
+train_37.mp4,37,train,8.0,11.0,14.0,19.0,
+train_38.mp4,38,train,10.0,12.0,14.0,18.0,
+train_40.mp4,40,train,21.0,24.0,27.0,31.0,
+train_40.mp4,40,train,44.0,46.0,49.0,53.0,
+train_41.mp4,41,train,26.0,30.0,35.0,39.0,

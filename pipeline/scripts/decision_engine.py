@@ -190,17 +190,25 @@ def decompose(counts: list) -> tuple[int, int]:
     to alighting. Measured on the project's clip: 41/0 from the endpoints
     alone, 61/20 from six readings, and the net agrees.
 
-    Changes smaller than FLOW_DEADBAND are dropped, or detector jitter would
-    be reported as a steady trickle of passengers in both directions."""
+    Movement smaller than FLOW_DEADBAND is ignored, or detector jitter would
+    be reported as a steady trickle of passengers in both directions. The
+    deadband is measured from the last level that registered, not between
+    neighbouring readings: with the Control Room reading every few seconds, a
+    queue boarding one person per reading never moves 2 between neighbours,
+    and a per-step deadband would throw the whole of it away."""
     boarded = alighted = 0
-    for a, b in zip(counts, counts[1:]):
-        d = b - a
+    if not counts:
+        return 0, 0
+    level = counts[0]
+    for c in counts[1:]:
+        d = c - level
         if abs(d) < FLOW_DEADBAND:
             continue
         if d < 0:
             boarded += -d
         else:
             alighted += d
+        level = c
     return boarded, alighted
 
 

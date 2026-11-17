@@ -40,6 +40,8 @@
 # ---------------------------------------------------------------------------
 *.log
 /pipeline/control_room/uploads/
+/pipeline/control_room/reading_logs/
+/pipeline/train_detect/dataset/
 
 # ---------------------------------------------------------------------------
 # Python
