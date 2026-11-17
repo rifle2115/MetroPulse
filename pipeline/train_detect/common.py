@@ -38,6 +38,9 @@ LABELS_DEFAULT = [REPO / "Data" / "train_labels.csv", REPO / "Data" / "val_test_
 # set on an external drive): pass --videos, or set METROPULSE_VIDEOS once.
 VIDEOS_DEFAULT = Path(os.environ.get("METROPULSE_VIDEOS", REPO / "Data" / "train_videos"))
 CAMERAS_DEFAULT = REPO / "pipeline" / "control_room" / "cameras.json"
+# where /calibrate keeps each camera's stills, including <id>_empty.jpg (its
+# "THIS FRAME = NO TRAIN" reference)
+CAMERA_FRAMES_DIR = REPO / "pipeline" / "control_room" / "camera_frames"
 DATASET_DEFAULT = HERE / "dataset"
 MODEL_DEFAULT = HERE / "models" / "door_state.pt"
 
@@ -179,6 +182,17 @@ def print_confusion(m) -> None:
     print(f"{'true ↓':<{w}}" + "".join(f"{c:>{w}}" for c in CLASSES))
     for k, c in enumerate(CLASSES):
         print(f"{c:<{w}}" + "".join(f"{v:>{w}}" for v in m[k]))
+
+
+def load_refs(dataset: Path) -> dict:
+    """{video: [reference crop paths]} from the dataset's refs.csv."""
+    refs: dict = {}
+    path = Path(dataset) / "refs.csv"
+    if path.exists():
+        with open(path, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                refs.setdefault(row["video"], []).append(row["path"])
+    return refs
 
 
 def load_cameras(path: Path) -> CalibrationStore:

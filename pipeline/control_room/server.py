@@ -50,7 +50,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "mcnn"))
 from camera_calibration import CalibrationError, CalibrationStore, CameraCalibration  # noqa: E402
 from person_counter import PersonCounter  # noqa: E402
 from train_motion import TrainMotionDetector  # noqa: E402
-from door_state import DoorStateDetector, DoorStateModel  # noqa: E402
+from door_state import DoorCropper, DoorStateDetector, DoorStateModel  # noqa: E402
 from inference import (  # noqa: E402
     MAX_FRAME_DIM, ZONE_CAPACITY, ZONE_IDS, frame_to_tensor, load_model, make_frame_source,
     now_iso, resize_max, video_fps, zone_counts,
@@ -695,9 +695,18 @@ def _process_video(video_path: str, source_name: str,
     # its doors marked; else the strip detector; else none (the clip departs
     # at its end).
     detector = None
-    if calibration is not None and calibration.door_crop and door_model is not None:
-        detector = DoorStateDetector(calibration, fps, door_model)
-    elif calibration is not None and calibration.train_strip:
+    # the classifier compares against this camera's empty track: its
+    # "THIS FRAME = NO TRAIN" still on /calibrate
+    empty_still = (cv2.imread(str(_train_ref_path(calibration.id, "empty")))
+                   if calibration is not None else None)
+    if (calibration is not None and calibration.door_crop and door_model is not None
+            and empty_still is not None):
+        detector = DoorStateDetector(calibration, fps, door_model,
+                                     DoorCropper(calibration)(empty_still))
+    elif calibration is not None and calibration.door_crop and door_model is not None:
+        print(f"[control-room] camera {calibration.id} has a door crop but no NO TRAIN still — "
+              f"press THIS FRAME = NO TRAIN on /calibrate to use the classifier", flush=True)
+    if detector is None and calibration is not None and calibration.train_strip:
         ref_train = cv2.imread(str(_train_ref_path(calibration.id, "train")))
         ref_empty = cv2.imread(str(_train_ref_path(calibration.id, "empty")))
         detector = TrainMotionDetector(calibration, fps, ref_train=ref_train, ref_empty=ref_empty)
