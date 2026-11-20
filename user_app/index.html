@@ -360,8 +360,12 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted)
 import mqtt from './vendor/mqtt.esm.js';
 
 /* The broker runs on the PC that served this page, so a phone on the same
-   Wi-Fi reaches it at the host name it used to open the app. */
-const MQTT_WS_URL = `ws://${location.hostname || 'localhost'}:9001`;
+   Wi-Fi reaches it at the host name it used to open the app — opening
+   http://192.168.0.191:8090 connects to ws://192.168.0.191:9001. If that host
+   is the wrong one (VPN, a second adapter, a reverse proxy), force the broker
+   once with ?mqtt=ws://192.168.0.191:9001 in the URL. */
+const MQTT_PARAM = new URLSearchParams(location.search).get('mqtt');
+const MQTT_WS_URL = MQTT_PARAM || `ws://${location.hostname || 'localhost'}:9001`;
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt = n => Number(n).toLocaleString('en-IN');
@@ -517,7 +521,8 @@ setTimeout(() => {
   const up = client && client.connected;
   $('stState').textContent = up ? 'Connected · no train running yet' : 'Cannot reach the station feed';
   $('boardWhy').textContent = up ? 'Start a run in the Digital Twin to see live coach loads.'
-                                 : `Make sure the station PC is on and you are on the same Wi-Fi.`;
+                                 : `No broker at ${MQTT_WS_URL} — same Wi-Fi as the station PC, `
+                                   + `port 9001 allowed, or open this page with ?mqtt=ws://<PC-IP>:9001.`;
 }, 6000);
 
 /* =============================== FORECAST ================================= */

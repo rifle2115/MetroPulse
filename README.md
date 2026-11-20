@@ -107,6 +107,50 @@ Then open:
 | Control Room | <http://127.0.0.1:8000> |
 | Passenger App | <http://127.0.0.1:8090> |
 
+### Open the passenger app on your phone
+
+The passenger app is the one screen meant to leave the laptop. Phone and laptop
+must be on the **same Wi-Fi network**.
+
+**1. Get the laptop's Wi-Fi IP — Windows PowerShell**
+
+```powershell
+(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.PrefixOrigin -eq 'Dhcp' }).IPAddress
+```
+
+That prints the address your Wi-Fi router gave the laptop, for example
+`192.168.0.191`. Use that IP in the next step.
+
+macOS: `ipconfig getifaddr en0` · Linux: `hostname -I`
+
+**2. On the phone, open `http://<that-IP>:8090`** — e.g.
+<http://192.168.0.191:8090>. The passenger app prints exactly this URL when it
+starts (`on your phone:`), so you can read it off the terminal instead.
+
+**MQTT follows automatically.** The page connects to the broker at the *same
+host you opened it with* — `ws://192.168.0.191:9001` in the example — so coach
+loads and live state reach the phone with no extra config. Both mosquitto
+listeners bind to all interfaces and Docker publishes ports `1883` (Python
+processes) and `9001` (browsers). The Control Room (`:8000`) and Twin (`:8080`)
+stay loopback-only; only `8090` and `9001` need to be reachable from the phone.
+
+If the app header says **Offline**:
+
+- allow port `9001` through the host firewall — on Windows, allow **Docker
+  Desktop** when the firewall prompt appears (Docker's port mapping is what
+  exposes the broker);
+- avoid guest/client-isolated Wi-Fi — many guest networks block phone-to-laptop
+  traffic even on the same SSID;
+- if the laptop has several adapters (VPN, Ethernet) and the page picked the
+  wrong host, force the broker in the URL:
+  <http://192.168.0.191:8090/?mqtt=ws://192.168.0.191:9001>
+
+After editing `pipeline/mqtt/mosquitto.conf`, re-apply it with
+`docker compose -f pipeline/mqtt/docker-compose.yml up -d`.
+
+Verify from the phone's browser: `http://<IP>:8090` must load the app, and the
+status pill must turn **Live** once the Twin is running.
+
 ---
 
 ## Running a demo
