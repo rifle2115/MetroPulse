@@ -81,6 +81,9 @@
   input[type=date]{flex:1.4}
   input[type=number]{flex:1;-moz-appearance:textfield}
   input[type=date]:focus,input[type=number]:focus{outline:none;border-color:var(--accent)}
+  select{width:100%;background:#0d141b;border:1px solid #24343f;color:#eaf4fb;
+    font-family:var(--mono);font-size:11px;padding:7px 8px}
+  select:focus{outline:none;border-color:var(--accent)}
   #predResult{margin-top:9px;font-size:11px;line-height:1.6;min-height:1.6em}
   #predResult b{letter-spacing:.08em}
 
@@ -107,8 +110,22 @@
       <div class="sect">SOURCE</div>
       <div id="dropzone">CLICK TO LOAD A VIDEO<br /><span style="color:var(--dimmer)">mp4 / avi / mov / webcam-recorded clips</span></div>
       <input type="file" id="fileInput" accept="video/*" />
+      <div class="stat" style="margin-top:10px;align-items:center">
+        <span class="k" title="one reading every this many seconds of video while it plays; 0 = only at the start and end">COUNT EVERY (S)</span>
+        <input type="number" id="readEvery" min="0" step="0.5" value="3" style="width:70px;flex:none" />
+      </div>
       <button class="danger" id="btnStop" disabled>■ STOP &amp; SEND TRAIN</button>
+      <div class="stat" style="margin-top:12px"><span class="k" title="read from the train strip of the active camera">TRAIN IN VIDEO</span><span class="v" id="trainState">—</span></div>
+      <div style="display:flex;gap:7px">
+        <button id="btnTrainArrived" disabled title="the train has stopped at the platform — keep the clip playing">TRAIN ARRIVED</button>
+        <button id="btnTrainLeft" disabled title="the train has left in the video — send the Twin's train, keep the clip playing">TRAIN LEFT</button>
+      </div>
       <div id="srcName"></div>
+
+      <div class="sect mt">CAMERA LAYOUT</div>
+      <select id="camPick" title="which camera's calibration the next clip is read with"></select>
+      <div id="camInfo" style="font-size:10px;color:var(--dimmer);margin-top:6px;line-height:1.5"></div>
+      <button id="btnCalibrate">CALIBRATE / TEST FRAMES / LOGS ↗</button>
 
       <div class="sect mt">PLATFORM QUEUE PER COACH (MCNN)</div>
       <div id="zctl"></div>
@@ -234,6 +251,13 @@ function applyStats(s) {
   $('runState').className = phase === 'idle' ? 'v' : 'v on';
   $('srcName').textContent = s.source_name ? ('LOADED: ' + s.source_name) : '';
   btnStop.disabled = !s.running;
+  $('btnTrainArrived').disabled = !s.running;
+  $('btnTrainLeft').disabled = !s.running;
+  const ts = s.train_state || 'not detected';
+  $('trainState').textContent = ts.toUpperCase();
+  $('trainState').style.color = ts === 'standing' ? 'var(--low)'
+    : (ts === 'leaving' || ts === 'arriving') ? 'var(--med)'
+    : ts === 'gone' ? 'var(--accent)' : 'var(--dim)';
 
   ZONES.forEach(z => {
     const hex = HEX[s.zone_status[z]] || HEX.low;
@@ -283,6 +307,7 @@ fileInput.addEventListener('change', async () => {
   if (!file) return;
   const form = new FormData();
   form.append('video', file);
+  form.append('read_every_s', String(Math.max(0, +$('readEvery').value || 0)));
   dropzone.textContent = 'UPLOADING…';
   await fetch('/api/load', { method: 'POST', body: form });
   dropzone.innerHTML = 'CLICK TO LOAD A DIFFERENT VIDEO';
@@ -293,6 +318,42 @@ btnStop.addEventListener('click', async () => {
   btnStop.disabled = true;
   await fetch('/api/stop', { method: 'POST' });
 });
+
+// fallback for when train detection misses — the clip keeps playing either way
+async function sendTrainEvent(event) {
+  await fetch('/api/train-event', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ event }) });
+}
+$('btnTrainArrived').addEventListener('click', () => sendTrainEvent('arrival'));
+$('btnTrainLeft').addEventListener('click', () => sendTrainEvent('departure'));
+
+/* Which camera calibration the next clip will be read with — picked here,
+   next to the clip it applies to, rather than only on /calibrate. Re-read
+   when this tab regains focus, since a camera may have just been added
+   there. */
+async function refreshCamera() {
+  try {
+    const j = await (await fetch('/api/cameras')).json();
+    const pick = $('camPick');
+    pick.innerHTML = j.cameras.map(c => `<option value="${c.id}">${c.name} (${c.id})</option>`).join('')
+      + '<option value="">NO CALIBRATION (FRAME THIRDS)</option>';
+    pick.value = j.active || '';
+    const cam = j.cameras.find(c => c.id === j.active);
+    $('camInfo').textContent = cam
+      ? `COACHES ${cam.coaches.join(' / ')} · APPLIES TO THE NEXT CLIP LOADED`
+      : 'NO CALIBRATION — FRAME SPLIT INTO EQUAL THIRDS';
+    pick.style.color = cam ? 'var(--low)' : 'var(--dim)';
+  } catch (e) { /* server down — the MQTT cell already says so */ }
+}
+$('camPick').addEventListener('change', async () => {
+  const id = $('camPick').value || null;
+  await fetch('/api/cameras/active', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                       body: JSON.stringify({ id }) });
+  refreshCamera();
+});
+$('btnCalibrate').addEventListener('click', () => window.open('/calibrate', '_blank'));
+window.addEventListener('focus', refreshCamera);
+refreshCamera();
 
 $('btnResetOcc').addEventListener('click', async () => {
   await fetch('/api/reset-occupancy', { method: 'POST' });

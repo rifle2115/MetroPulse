@@ -1,0 +1,1067 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Camera Calibration</title>
+
+<style>
+  :root{
+    --bg:#070a0e;
+    --panel:rgba(11,16,22,.88);
+    --panel-solid:#0b1016;
+    --line:rgba(120,175,205,.18);
+    --line-hot:rgba(120,175,205,.32);
+    --txt:#c9d8e4;
+    --dim:#6a8195;
+    --dimmer:#47586a;
+    --low:#2ee27a;
+    --med:#ffb020;
+    --high:#ff3b4a;
+    --accent:#5fb8ff;
+    --cA:#3caaff;
+    --cB:#50dc78;
+    --cC:#ffa03c;
+    --mono:"JetBrains Mono","SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--txt);
+    font-family:var(--mono);font-size:13px;-webkit-font-smoothing:antialiased}
+
+  #topbar{display:flex;align-items:stretch;gap:1px;background:var(--line);
+    border-bottom:1px solid var(--line-hot)}
+  #topbar .cell{background:var(--panel-solid);padding:10px 18px;display:flex;align-items:center}
+  #topbar .cell.title{flex:1;flex-direction:column;align-items:flex-start;justify-content:center}
+  #topbar .title .n{font-size:15px;letter-spacing:.14em;color:#eaf4fb}
+  #topbar .title .s{font-size:9px;letter-spacing:.16em;color:var(--dimmer);margin-top:2px}
+  #topbar a{color:var(--accent);font-size:11px;letter-spacing:.1em;text-decoration:none}
+  .tab{background:none;border:none;color:var(--dim);font-family:var(--mono);font-size:11px;
+    letter-spacing:.14em;padding:0 6px;cursor:pointer;width:auto;margin:0}
+  .tab.on{color:#eaf4fb;border-bottom:2px solid var(--accent)}
+  .tab:hover{background:none;color:#fff}
+
+  #wrap{display:flex;height:calc(100% - 57px)}
+  #main{flex:1;min-width:0;background:#050709;padding:20px;overflow:auto;position:relative}
+  #panel{width:340px;flex:none;background:var(--panel);border-left:1px solid var(--line-hot);
+    overflow-y:auto}
+  #panel .body{padding:14px}
+
+  .sect{font-size:9px;letter-spacing:.18em;color:var(--dimmer);margin:0 0 8px}
+  .sect.mt{margin-top:18px}
+  .hint{font-size:10.5px;color:var(--dim);line-height:1.6;margin:4px 0 8px}
+  .hint b{color:#dcecf6;font-weight:normal}
+  ol.hint{padding-left:18px;margin:4px 0 8px}
+
+  button{width:100%;background:#12202b;border:1px solid #26414f;color:#cfe4f2;font-family:var(--mono);
+    font-size:11px;letter-spacing:.1em;padding:9px 6px;cursor:pointer;margin-top:8px}
+  button:hover{background:#1b3243;border-color:#3d6d87;color:#fff}
+  button.primary{background:#10324a;border-color:#2f6f99;color:#dff1ff}
+  button.danger{background:#3a1418;border-color:#7a2028;color:#ffb0b6}
+  button.danger:hover{background:#4d1a20;border-color:#ff3b4a;color:#ffd6da}
+  button:disabled{opacity:.35;cursor:not-allowed}
+  .row{display:flex;gap:7px}
+  .row > *{flex:1}
+
+  input[type=text],input[type=number],select{width:100%;background:#0d141b;border:1px solid #24343f;
+    color:#eaf4fb;font-family:var(--mono);font-size:12px;padding:7px 8px;min-width:0}
+  input:focus,select:focus{outline:none;border-color:var(--accent)}
+  label.k{display:block;font-size:9px;letter-spacing:.14em;color:var(--dim);margin:8px 0 4px}
+  input[type=file]{display:none}
+
+  .msg{margin-top:9px;font-size:11px;line-height:1.6;min-height:1.6em}
+  .msg.err{color:var(--high)}
+  .msg.ok{color:var(--low)}
+
+  .seg{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:11px}
+  .seg i{display:inline-block;width:10px;height:10px;border-radius:2px;flex:none}
+  .seg span{flex:1;color:var(--dim)}
+  .seg select{width:70px;flex:none}
+
+  /* calibrate view */
+  #calView{display:flex;align-items:center;justify-content:center;min-height:100%}
+  #canvas{max-width:100%;max-height:calc(100vh - 100px);border:1px solid var(--line-hot);
+    cursor:crosshair;display:none}
+  #calEmpty{color:var(--dimmer);font-size:12px;letter-spacing:.1em;text-align:center;line-height:1.8}
+  #modeBadge{position:absolute;top:26px;left:26px;background:rgba(5,7,9,.85);
+    border:1px solid var(--line-hot);padding:6px 10px;font-size:10.5px;letter-spacing:.1em;display:none}
+
+  /* test view */
+  #testView{display:none}
+  table{width:100%;border-collapse:collapse;font-size:11px}
+  th{font-size:9px;letter-spacing:.14em;color:var(--dimmer);text-align:left;font-weight:normal;
+    padding:6px 6px;border-bottom:1px solid var(--line-hot);white-space:nowrap}
+  td{padding:6px;border-bottom:1px solid var(--line);vertical-align:middle}
+  td.num{font-variant-numeric:tabular-nums;text-align:right}
+  td input[type=number]{width:58px;padding:4px 5px;font-size:11px}
+  td img.thumb{width:180px;display:block;border:1px solid var(--line-hot);cursor:zoom-in;background:#000}
+  td .ph{width:180px;height:101px;display:flex;align-items:center;justify-content:center;
+    border:1px dashed var(--line-hot);color:var(--dimmer);font-size:10px}
+  .err-good{color:var(--low)} .err-mid{color:var(--med)} .err-bad{color:var(--high)}
+  .zones b{display:inline-block;min-width:34px}
+  #testEmpty{color:var(--dimmer);font-size:12px;letter-spacing:.1em;text-align:center;
+    line-height:1.8;padding-top:80px}
+  .stat{display:flex;justify-content:space-between;margin-bottom:7px;font-size:11px}
+  .stat .k{color:var(--dim);letter-spacing:.08em}
+  .stat .v{color:#eaf4fb;font-variant-numeric:tabular-nums}
+
+  /* logs view */
+  #logView{display:none}
+  #logGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+  .lcard{background:#0b1016;border:1px solid var(--line-hot);padding:10px;font-size:11px}
+  .lcard img{width:100%;display:block;cursor:zoom-in;background:#000;border:1px solid var(--line)}
+  .lcard .hd{display:flex;justify-content:space-between;margin:8px 0 6px;color:#dcecf6;letter-spacing:.06em}
+  .lcard .hd span{color:var(--dim)}
+  .lcard .zz{display:flex;gap:12px;margin-bottom:6px}
+  .lcard .zz b{font-weight:normal}
+  .lcard .mine{display:flex;gap:5px;align-items:center;margin-top:6px;flex-wrap:wrap}
+  .lcard .mine input{width:52px;padding:4px 5px;font-size:11px}
+  .lcard .mine .lbl{color:var(--dim);font-size:9px;letter-spacing:.12em;margin-right:2px}
+  .lcard .acts{display:flex;gap:6px;margin-top:6px}
+  .lcard .acts button{margin:0;padding:4px 6px;font-size:9.5px}
+  .lcard.checked{border-color:#2f6f4a}
+  #logEmpty{color:var(--dimmer);font-size:12px;letter-spacing:.1em;text-align:center;line-height:1.8;padding-top:80px}
+
+  #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;
+    justify-content:center;z-index:10;cursor:zoom-out}
+  #lightbox img{max-width:95vw;max-height:95vh}
+</style>
+
+<div id="topbar">
+  <div class="cell title"><span class="n">METROPULSE</span><span class="s">CAMERA CALIBRATION &amp; DETECTION TEST</span></div>
+  <div class="cell"><button class="tab on" id="tabCal">CALIBRATE</button></div>
+  <div class="cell"><button class="tab" id="tabTest">TEST FRAMES</button></div>
+  <div class="cell"><button class="tab" id="tabLogs">READING LOGS</button></div>
+  <div class="cell"><a href="/">← CONTROL ROOM</a></div>
+</div>
+
+<div id="wrap">
+  <div id="main">
+    <div id="calView">
+      <canvas id="canvas"></canvas>
+      <div id="calEmpty">NO REFERENCE FRAME<br />LOAD AN IMAGE OR VIDEO FROM THIS CAMERA →</div>
+      <div id="modeBadge"></div>
+    </div>
+    <div id="testView">
+      <div id="testEmpty">NO TEST FRAMES YET<br />ADD IMAGES OR VIDEOS FROM THE PANEL →</div>
+      <table id="testTable" style="display:none">
+        <thead>
+          <tr>
+            <th>FRAME</th><th>FILE</th><th>VIDEO AT (s)</th>
+            <th>EXPECTED<br />TOTAL</th><th>EXPECTED<br />A · B · C</th>
+            <th>COUNTED</th><th>OFF<br />PLATFORM</th><th>PER COACH</th><th>MCNN EST.</th>
+            <th>ERROR</th><th>TIME</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="testBody"></tbody>
+      </table>
+    </div>
+    <div id="logView">
+      <div id="logEmpty">NO READING LOGS YET<br />LOAD A CLIP IN THE CONTROL ROOM — EVERY READING IS SAVED HERE</div>
+      <div id="logGrid"></div>
+    </div>
+  </div>
+
+  <div id="panel">
+    <!-- ============ CALIBRATE ============ -->
+    <div class="body" id="calPanel">
+      <div class="sect">CAMERA</div>
+      <select id="camSelect"></select>
+      <label class="k">CAMERA ID (letters, digits, - _)</label>
+      <input type="text" id="camId" placeholder="e.g. hankou_up_tail" />
+      <label class="k">NAME</label>
+      <input type="text" id="camName" placeholder="e.g. Hankou Rly Stn — upbound, tail end" />
+
+      <div class="sect mt">REFERENCE FRAME</div>
+      <div class="hint">A still (jpg/png) or a video from <b>this camera</b>. Pick a moment where the platform floor and the coach doors are easy to see.</div>
+      <button id="btnLoadFrame">LOAD IMAGE OR VIDEO</button>
+      <input type="file" id="frameFile" accept="image/*,video/*" />
+      <div class="row" id="videoAtRow" style="display:none;align-items:flex-end">
+        <div><label class="k">VIDEO AT (SECONDS)</label><input type="number" id="videoAt" min="0" step="0.5" value="0" /></div>
+        <div><button id="btnRegrab">GRAB FRAME</button></div>
+      </div>
+      <div class="msg" id="frameMsg"></div>
+
+      <div class="sect mt">STEP 1 · PLATFORM CORNERS <span id="cornerCount">0/4</span></div>
+      <div class="hint">Click the 4 corners of the area where people <b>wait for this train</b>, in order around the edge:</div>
+      <ol class="hint">
+        <li><b>Platform edge</b> (screen doors), one end</li>
+        <li><b>Platform edge</b>, the other end</li>
+        <li><b>Back</b> of the waiting area, behind corner 2</li>
+        <li><b>Back</b> of the waiting area, behind corner 1</li>
+      </ol>
+      <div class="hint">Anyone whose feet are outside this shape — inside the train, behind the glass, on the stairs — is not counted.</div>
+      <button id="btnRedoCorners">REDO CORNERS</button>
+
+      <div class="sect mt">STEP 2 · COACH SEAMS</div>
+      <div class="hint">Click on the floor where <b>one coach ends and the next begins</b> (the gap between two coaches' doors). One click per seam — the line is drawn across the platform for you. No seams = this camera sees a single coach.</div>
+      <div id="segList"></div>
+      <div class="row">
+        <button id="btnUndoSeam">UNDO LAST SEAM</button>
+        <button id="btnClearSeams">CLEAR SEAMS</button>
+      </div>
+
+      <div class="sect mt">STEP 3 · TRAIN STRIP <span id="stripCount">0/4</span> <span style="color:var(--dim)">(TRAIN ARRIVE / LEAVE DETECTION)</span></div>
+      <div class="hint">A band of the <b>train body seen through the upper glass</b> — window tops and roof line, <b>above people's heads</b>. When the train moves, this band slides sideways; that's how the Control Room knows it arrived or left. Click in order:</div>
+      <ol class="hint">
+        <li><b>Top</b> edge, corner-1 end</li>
+        <li><b>Top</b> edge, corner-2 end</li>
+        <li><b>Bottom</b> edge, under 2</li>
+        <li><b>Bottom</b> edge, under 1</li>
+      </ol>
+      <div class="hint">Keep it on the train, not the station sign or the door frames, and long — the more of the train it covers, the surer the detection. Optional: without it the clip departs at its end, as before.</div>
+      <div class="row">
+        <button id="btnMarkStrip">MARK TRAIN STRIP</button>
+        <button id="btnClearStrip">CLEAR STRIP</button>
+      </div>
+      <div class="hint" style="margin-top:12px"><b>Reference stills</b> — needed when your clip is made of CCTV stills taken seconds apart (the train is never seen moving). After saving the camera: load a frame from this camera with a <b>train standing</b> at the platform and press the first button; load one with <b>no train</b> and press the second.</div>
+      <div class="row">
+        <button id="btnRefTrain">THIS FRAME = TRAIN STANDING</button>
+        <button id="btnRefEmpty">THIS FRAME = NO TRAIN</button>
+      </div>
+      <div class="msg" id="refMsg"></div>
+
+      <div class="sect mt">STEP 4 · DOOR CROP <span id="doorCount">0/4</span> <span style="color:var(--dim)">(TRAIN CLASSIFIER)</span></div>
+      <div class="hint">A box around <b>2–3 screen doors</b>, full height: what the trained classifier looks at to tell <b>train</b> from <b>no train</b>. Pick doors people rarely block, ideally the far side of the frame from the stairs. Click in order:</div>
+      <ol class="hint">
+        <li><b>Top</b> of the doors, corner-1 end</li>
+        <li><b>Top</b> of the doors, corner-2 end</li>
+        <li><b>Bottom</b> (floor line), under 2</li>
+        <li><b>Bottom</b> (floor line), under 1</li>
+      </ol>
+      <div class="hint">Mark the same doors for every clip from the same physical camera.</div>
+      <div class="row">
+        <button id="btnMarkDoor">MARK DOOR CROP</button>
+        <button id="btnClearDoor">CLEAR CROP</button>
+      </div>
+
+      <div class="sect mt">SAVE</div>
+      <button class="primary" id="btnSaveActive">SAVE &amp; USE FOR CONTROL ROOM</button>
+      <button id="btnSave">SAVE ONLY</button>
+      <button class="danger" id="btnDelete">DELETE THIS CAMERA</button>
+      <div class="msg" id="saveMsg"></div>
+
+      <div class="sect mt">CONTROL ROOM IS USING</div>
+      <div class="stat"><span class="k">ACTIVE CAMERA</span><span class="v" id="activeName">—</span></div>
+      <button id="btnNoCalib">USE NO CALIBRATION (FRAME THIRDS)</button>
+      <div class="hint">Takes effect on the next clip loaded in the Control Room.</div>
+    </div>
+
+    <!-- ============ TEST ============ -->
+    <div class="body" id="testPanel" style="display:none">
+      <div class="sect">TEST WITH CAMERA</div>
+      <select id="testCam"></select>
+      <div class="hint">Pick the camera these frames came from. "No calibration" runs the old frame-thirds split, so you can compare the two on the same frames.</div>
+
+      <div class="sect mt">FRAMES</div>
+      <button id="btnAddFrames">ADD IMAGES / VIDEOS</button>
+      <input type="file" id="testFiles" accept="image/*,video/*" multiple />
+      <div class="hint">For each frame, type how many people <b>you</b> count inside the marked platform area (optionally per coach), then run. Leave blank to just see what the model finds.</div>
+      <button class="primary" id="btnRunAll">▶ RUN ALL</button>
+      <div class="row">
+        <button id="btnExport">EXPORT CSV</button>
+        <button class="danger" id="btnClearTests">CLEAR</button>
+      </div>
+      <div class="msg" id="testMsg"></div>
+
+      <div class="sect mt">SUMMARY</div>
+      <div class="stat"><span class="k">FRAMES RUN</span><span class="v" id="sumRun">0</span></div>
+      <div class="stat"><span class="k">WITH EXPECTED COUNT</span><span class="v" id="sumScored">0</span></div>
+      <div class="stat"><span class="k">MEAN ABS ERROR (TOTAL)</span><span class="v" id="sumMae">—</span></div>
+      <div class="stat"><span class="k">MEAN ACCURACY (TOTAL)</span><span class="v" id="sumAcc">—</span></div>
+      <div class="stat"><span class="k">MEAN ABS ERROR (PER COACH)</span><span class="v" id="sumCoachMae">—</span></div>
+      <div class="stat"><span class="k">AVG DETECTION TIME</span><span class="v" id="sumTime">—</span></div>
+
+      <div class="sect mt">READING THE IMAGES</div>
+      <div class="hint">
+        <b style="color:var(--low)">Green box</b> counted (orange = low-confidence but counted).<br />
+        <b style="color:#999">Grey box</b> detected but off the marked platform — not counted.<br />
+        The <b>dot</b> at the bottom of each box is the foot point that decides the coach.<br />
+        Testing publishes nothing — the Twin and passenger app are not affected.
+      </div>
+    </div>
+
+    <!-- ============ LOGS ============ -->
+    <div class="body" id="logPanel" style="display:none">
+      <div class="sect">CLIP RUN</div>
+      <select id="logRun"></select>
+      <button id="btnLogRefresh">↻ REFRESH</button>
+      <div class="hint" id="logMeta"></div>
+
+      <div class="sect mt">CHECK THE READINGS</div>
+      <div class="hint">Each card is one reading the Control Room took. Look at the annotated frame, count the people <b>inside the marked platform</b> yourself, and type it in — it's saved next to the log. <b>RAW</b> opens the untouched frame; <b>→ TEST</b> sends it to TEST FRAMES to re-run it with a different camera layout.</div>
+
+      <div class="sect mt">SUMMARY</div>
+      <div class="stat"><span class="k">READINGS</span><span class="v" id="lgN">0</span></div>
+      <div class="stat"><span class="k">CHECKED BY YOU</span><span class="v" id="lgChecked">0</span></div>
+      <div class="stat"><span class="k">MEAN ABS ERROR (TOTAL)</span><span class="v" id="lgMae">—</span></div>
+      <div class="stat"><span class="k">MEAN ACCURACY (TOTAL)</span><span class="v" id="lgAcc">—</span></div>
+      <div class="stat"><span class="k">MEAN ABS ERROR (PER COACH)</span><span class="v" id="lgCoachMae">—</span></div>
+      <button id="btnLogExport">EXPORT CSV</button>
+      <button class="danger" id="btnLogDelete">DELETE THIS RUN'S LOG</button>
+      <div class="msg" id="logMsg"></div>
+    </div>
+  </div>
+</div>
+
+<div id="lightbox"><img alt="" /></div>
+
+<script>
+const ZONES = ['A', 'B', 'C'];
+const COACH_HEX = { A: '#3caaff', B: '#50dc78', C: '#ffa03c' };
+const $ = id => document.getElementById(id);
+
+/* ---------- homography (4 point pairs) ----------
+   The same transform camera_calibration.py builds with OpenCV, done here so
+   the seams can be drawn across the platform while the operator is clicking.
+   The server recomputes everything on save; this is only for drawing. */
+function solve8(A, b) {
+  const n = 8, M = A.map((r, i) => [...r, b[i]]);
+  for (let c = 0; c < n; c++) {
+    let p = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    if (Math.abs(M[p][c]) < 1e-12) return null;
+    [M[c], M[p]] = [M[p], M[c]];
+    for (let r = 0; r < n; r++) {
+      if (r === c) continue;
+      const f = M[r][c] / M[c][c];
+      for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k];
+    }
+  }
+  return M.map((r, i) => r[n] / r[i]);
+}
+function homography(src, dst) {
+  const A = [], b = [];
+  for (let i = 0; i < 4; i++) {
+    const [x, y] = src[i], [u, v] = dst[i];
+    A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u);
+    A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v);
+  }
+  const h = solve8(A, b);
+  return h && [[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], 1]];
+}
+function applyH(H, [x, y]) {
+  const w = H[2][0] * x + H[2][1] * y + H[2][2];
+  return [(H[0][0] * x + H[0][1] * y + H[0][2]) / w, (H[1][0] * x + H[1][1] * y + H[1][2]) / w];
+}
+const UNIT = [[0, 0], [1, 0], [1, 1], [0, 1]];
+
+/* ---------- calibrate state ---------- */
+const canvas = $('canvas'), ctx = canvas.getContext('2d');
+let frameImg = null;          // HTMLImageElement of the reference frame
+let frameB64 = null;          // that frame's JPEG, sent with the save
+let frameFile = null;         // the loaded file, kept to re-grab a different second
+let platform = [];            // normalised [x, y] x up to 4
+let boundaries = [];          // normalised [x, y], click order
+let coaches = [];             // label per segment, ordered from corner 1
+let trainStrip = [];          // normalised [x, y] x up to 4, for train detection
+let markingStrip = false;     // clicks go to the train strip, not the seams
+let doorCrop = [];            // normalised [x, y] x up to 4, for the door-state classifier
+let markingDoor = false;      // clicks go to the door crop
+let toFloor = null, toImage = null;
+let camList = [], activeId = null;
+
+function geometry() {
+  toFloor = toImage = null;
+  if (platform.length === 4) {
+    toFloor = homography(platform, UNIT);
+    toImage = homography(UNIT, platform);
+  }
+}
+function seams() {
+  if (!toFloor) return [];
+  return boundaries.map(p => applyH(toFloor, p)[0]).sort((a, b) => a - b);
+}
+function defaultCoaches(n) {
+  return Array.from({ length: n }, (_, i) => ZONES[Math.min(i, ZONES.length - 1)]);
+}
+function syncCoaches() {
+  const n = boundaries.length + 1;
+  if (coaches.length !== n) coaches = defaultCoaches(n);
+}
+
+function draw() {
+  if (!frameImg) return;
+  syncCoaches();
+  const W = canvas.width, H = canvas.height;
+  ctx.drawImage(frameImg, 0, 0, W, H);
+  const px = ([x, y]) => [x * W, y * H];
+  const lw = Math.max(2, W / 640);
+
+  // segments, filled per coach so it's obvious which floor belongs to which
+  if (toImage) {
+    const edges = [0, ...seams(), 1];
+    for (let i = 0; i < edges.length - 1; i++) {
+      const quad = [[edges[i], 0], [edges[i + 1], 0], [edges[i + 1], 1], [edges[i], 1]]
+        .map(p => px(applyH(toImage, p)));
+      ctx.beginPath();
+      quad.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+      ctx.closePath();
+      ctx.fillStyle = COACH_HEX[coaches[i]] + '33';
+      ctx.fill();
+      const [cx, cy] = px(applyH(toImage, [(edges[i] + edges[i + 1]) / 2, 0.5]));
+      ctx.font = `bold ${Math.round(W / 28)}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = lw * 2; ctx.strokeStyle = '#000';
+      ctx.strokeText(coaches[i], cx, cy);
+      ctx.fillStyle = COACH_HEX[coaches[i]];
+      ctx.fillText(coaches[i], cx, cy);
+    }
+    // seam lines across the full depth
+    ctx.strokeStyle = '#ffc800'; ctx.lineWidth = lw;
+    for (const u of seams()) {
+      const [a, b] = [applyH(toImage, [u, 0]), applyH(toImage, [u, 1])].map(px);
+      ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke();
+    }
+  }
+
+  // platform outline and numbered corners
+  if (platform.length) {
+    ctx.strokeStyle = '#00c8ff'; ctx.lineWidth = lw;
+    ctx.beginPath();
+    platform.map(px).forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+    if (platform.length === 4) ctx.closePath();
+    ctx.stroke();
+    // the platform edge (1-2) is what the train stops along — mark it
+    if (platform.length >= 2) {
+      ctx.strokeStyle = '#ff3b4a'; ctx.lineWidth = lw * 1.6;
+      ctx.beginPath(); ctx.moveTo(...px(platform[0])); ctx.lineTo(...px(platform[1])); ctx.stroke();
+    }
+    platform.forEach((p, k) => {
+      const [x, y] = px(p), r = Math.max(9, W / 110);
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#00c8ff'; ctx.fill();
+      ctx.fillStyle = '#000'; ctx.font = `bold ${Math.round(r * 1.2)}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(k + 1), x, y + 1);
+    });
+  }
+  // train strip — magenta, numbered like the platform corners
+  if (trainStrip.length) {
+    ctx.strokeStyle = '#ff50dc'; ctx.lineWidth = lw;
+    ctx.beginPath();
+    trainStrip.map(px).forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+    if (trainStrip.length === 4) {
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255,80,220,.18)'; ctx.fill();
+    }
+    ctx.stroke();
+    trainStrip.forEach((p, k) => {
+      const [x, y] = px(p), r = Math.max(8, W / 130);
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff50dc'; ctx.fill();
+      ctx.fillStyle = '#000'; ctx.font = `bold ${Math.round(r * 1.2)}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(k + 1), x, y + 1);
+    });
+  }
+  // door crop — green, numbered
+  if (doorCrop.length) {
+    ctx.strokeStyle = '#38e0a0'; ctx.lineWidth = lw;
+    ctx.beginPath();
+    doorCrop.map(px).forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+    if (doorCrop.length === 4) {
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(56,224,160,.16)'; ctx.fill();
+    }
+    ctx.stroke();
+    doorCrop.forEach((p, k) => {
+      const [x, y] = px(p), r = Math.max(8, W / 130);
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#38e0a0'; ctx.fill();
+      ctx.fillStyle = '#000'; ctx.font = `bold ${Math.round(r * 1.2)}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(k + 1), x, y + 1);
+    });
+  }
+  // where each seam was actually clicked
+  boundaries.forEach(p => {
+    const [x, y] = px(p);
+    ctx.beginPath(); ctx.arc(x, y, Math.max(5, W / 220), 0, Math.PI * 2);
+    ctx.fillStyle = '#ffc800'; ctx.fill();
+  });
+  renderPanelState();
+}
+
+function renderPanelState() {
+  $('cornerCount').textContent = `${platform.length}/4`;
+  $('stripCount').textContent = `${trainStrip.length}/4`;
+  $('doorCount').textContent = `${doorCrop.length}/4`;
+  $('btnMarkStrip').textContent = markingStrip ? 'MARKING… CLICK ON THE TRAIN' : 'MARK TRAIN STRIP';
+  $('btnMarkDoor').textContent = markingDoor ? 'MARKING… CLICK THE DOORS' : 'MARK DOOR CROP';
+  const badge = $('modeBadge');
+  badge.style.display = frameImg ? 'block' : 'none';
+  badge.innerHTML = markingDoor
+    ? `CLICK DOOR CROP CORNER <b style="color:#38e0a0">${doorCrop.length + 1}</b> OF 4`
+      + (doorCrop.length < 2 ? ' — TOP OF THE DOORS' : ' — FLOOR LINE')
+    : markingStrip
+    ? `CLICK TRAIN STRIP CORNER <b style="color:#ff50dc">${trainStrip.length + 1}</b> OF 4`
+      + (trainStrip.length < 2 ? ' — TOP EDGE, ABOVE HEADS' : ' — BOTTOM EDGE')
+    : platform.length < 4
+    ? `CLICK CORNER <b style="color:#00c8ff">${platform.length + 1}</b> OF 4`
+      + (platform.length < 2 ? ' — ALONG THE PLATFORM EDGE' : ' — BACK OF THE WAITING AREA')
+    : `CLICK A <b style="color:#ffc800">COACH SEAM</b> ON THE PLATFORM FLOOR · ${boundaries.length} MARKED`;
+
+  syncCoaches();
+  const edges = [0, ...seams(), 1];
+  $('segList').innerHTML = platform.length < 4 ? '<div class="hint">Finish step 1 first.</div>'
+    : coaches.map((c, i) => `<div class="seg"><i style="background:${COACH_HEX[c]}"></i>`
+      + `<span>SEGMENT ${i + 1}${i === 0 ? ' (corner 1 end)' : i === coaches.length - 1 ? ' (corner 2 end)' : ''}`
+      + ` · ${Math.round((edges[i + 1] - edges[i]) * 100)}%</span>`
+      + `<select data-i="${i}">${ZONES.map(z => `<option${z === c ? ' selected' : ''}>${z}</option>`).join('')}</select></div>`
+    ).join('');
+  $('segList').querySelectorAll('select').forEach(sel => sel.addEventListener('change', () => {
+    coaches[+sel.dataset.i] = sel.value; draw();
+  }));
+}
+
+canvas.addEventListener('click', e => {
+  const r = canvas.getBoundingClientRect();
+  const p = [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height];
+  if (markingDoor) {
+    doorCrop.push(p);
+    if (doorCrop.length === 4) markingDoor = false;
+  } else if (markingStrip) {
+    trainStrip.push(p);
+    if (trainStrip.length === 4) markingStrip = false;
+  } else if (platform.length < 4) {
+    platform.push(p);
+    geometry();
+    if (platform.length === 4 && !toFloor) {
+      platform.pop(); geometry();
+      return say('saveMsg', 'Those corners make no usable shape — try again.', 'err');
+    }
+  } else {
+    const [u, v] = applyH(toFloor, p);
+    if (!(u > 0 && u < 1 && v >= -0.05 && v <= 1.05))
+      return say('saveMsg', 'Click seams inside the marked platform area.', 'err');
+    boundaries.push(p);
+    coaches = defaultCoaches(boundaries.length + 1);
+  }
+  say('saveMsg', '');
+  draw();
+});
+
+function say(id, text, cls = '') { $(id).textContent = text; $(id).className = 'msg ' + cls; }
+
+function showFrame(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      frameImg = img;
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      canvas.style.display = 'block'; $('calEmpty').style.display = 'none';
+      draw(); resolve();
+    };
+    img.onerror = reject;
+    img.src = url;
+    const fr = new FileReader();
+    fr.onload = () => { frameB64 = String(fr.result).split(',')[1]; };
+    fr.readAsDataURL(blob);
+  });
+}
+
+async function grabFrame(file, atS) {
+  say('frameMsg', 'READING FRAME…');
+  const form = new FormData();
+  form.append('file', file);
+  form.append('at_s', String(atS || 0));
+  const res = await fetch('/api/frame-grab', { method: 'POST', body: form });
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}));
+    return say('frameMsg', j.error || 'could not read that file', 'err');
+  }
+  const dur = res.headers.get('X-Video-Duration');
+  $('videoAtRow').style.display = dur ? 'flex' : 'none';
+  if (dur) $('videoAt').max = dur;
+  await showFrame(await res.blob());
+  say('frameMsg', `${file.name} · ${frameImg.naturalWidth}×${frameImg.naturalHeight}`
+    + (dur ? ` · video ${(+dur).toFixed(1)}s, frame at ${(+atS || 0).toFixed(1)}s` : ''), 'ok');
+}
+
+$('btnLoadFrame').addEventListener('click', () => $('frameFile').click());
+$('frameFile').addEventListener('change', () => {
+  frameFile = $('frameFile').files[0];
+  if (frameFile) { $('videoAt').value = 0; grabFrame(frameFile, 0); }
+  $('frameFile').value = '';
+});
+$('btnRegrab').addEventListener('click', () => frameFile && grabFrame(frameFile, +$('videoAt').value));
+
+$('btnRedoCorners').addEventListener('click', () => {
+  platform = []; boundaries = []; coaches = []; geometry(); draw();
+});
+$('btnUndoSeam').addEventListener('click', () => {
+  boundaries.pop(); coaches = defaultCoaches(boundaries.length + 1); draw();
+});
+$('btnClearSeams').addEventListener('click', () => {
+  boundaries = []; coaches = defaultCoaches(1); draw();
+});
+$('btnMarkStrip').addEventListener('click', () => {
+  if (!frameImg) return say('saveMsg', 'Load a reference frame first.', 'err');
+  trainStrip = []; markingStrip = true; markingDoor = false; say('saveMsg', ''); draw();
+});
+$('btnMarkDoor').addEventListener('click', () => {
+  if (!frameImg) return say('saveMsg', 'Load a reference frame first.', 'err');
+  doorCrop = []; markingDoor = true; markingStrip = false; say('saveMsg', ''); draw();
+});
+$('btnClearDoor').addEventListener('click', () => {
+  doorCrop = []; markingDoor = false; draw();
+});
+$('btnClearStrip').addEventListener('click', () => {
+  trainStrip = []; markingStrip = false; draw();
+});
+
+function showRefStatus() {
+  const cam = camList.find(c => c.id === $('camSelect').value);
+  if (!cam) { say('refMsg', ''); return; }
+  const tick = ok => ok ? '✓' : '✗';
+  const both = cam.has_train_ref && cam.has_empty_ref;
+  say('refMsg', `TRAIN STANDING ${tick(cam.has_train_ref)} · NO TRAIN ${tick(cam.has_empty_ref)} — `
+    + (both ? 'presence mode (works on stills)' : 'motion mode (needs continuous video)'),
+    both ? 'ok' : '');
+}
+
+async function saveRef(kind) {
+  const id = $('camSelect').value;
+  if (!id) return say('refMsg', 'Save the camera first, then set its reference stills.', 'err');
+  if (!frameB64) return say('refMsg', 'Load a frame from this camera first.', 'err');
+  const res = await fetch(`/api/cameras/${encodeURIComponent(id)}/train-ref`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind, jpeg_b64: frameB64 }) });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) return say('refMsg', j.error || 'could not save', 'err');
+  await loadCameras(id);
+  showRefStatus();
+}
+$('btnRefTrain').addEventListener('click', () => saveRef('train'));
+$('btnRefEmpty').addEventListener('click', () => saveRef('empty'));
+
+/* ---------- cameras ---------- */
+async function loadCameras(selectId) {
+  const res = await fetch('/api/cameras');
+  const j = await res.json();
+  camList = j.cameras; activeId = j.active;
+  const active = camList.find(c => c.id === activeId);
+  $('activeName').textContent = active ? active.name : 'NONE (THIRDS)';
+  $('activeName').style.color = active ? 'var(--low)' : 'var(--dim)';
+
+  $('camSelect').innerHTML = '<option value="">+ NEW CAMERA</option>'
+    + camList.map(c => `<option value="${c.id}">${c.name} (${c.id})${c.id === activeId ? ' ★' : ''}</option>`).join('');
+  if (selectId !== undefined) $('camSelect').value = selectId;
+
+  const prevTest = $('testCam').value;
+  $('testCam').innerHTML = camList.map(c => `<option value="${c.id}">${c.name} (${c.id})${c.id === activeId ? ' ★' : ''}</option>`).join('')
+    + '<option value="">NO CALIBRATION (FRAME THIRDS)</option>';
+  $('testCam').value = camList.some(c => c.id === prevTest) ? prevTest : (activeId || (camList[0]?.id ?? ''));
+}
+
+async function openCamera(id) {
+  const cam = camList.find(c => c.id === id);
+  frameFile = null; $('videoAtRow').style.display = 'none';
+  if (!cam) {
+    $('camId').value = ''; $('camName').value = ''; $('camId').disabled = false;
+    platform = []; boundaries = []; coaches = []; trainStrip = []; markingStrip = false;
+    doorCrop = []; markingDoor = false; geometry();
+    say('frameMsg', ''); say('saveMsg', '');
+    if (frameImg) draw();
+    return;
+  }
+  $('camId').value = cam.id; $('camId').disabled = true; $('camName').value = cam.name;
+  platform = cam.platform.map(p => [...p]);
+  boundaries = cam.boundaries.map(p => [...p]);
+  trainStrip = (cam.train_strip || []).map(p => [...p]);
+  markingStrip = false;
+  doorCrop = (cam.door_crop || []).map(p => [...p]);
+  markingDoor = false;
+  geometry();
+  // stored coaches follow the server's sorted seam order, same as seams() here
+  coaches = [...cam.coaches];
+  if (cam.has_frame) {
+    const res = await fetch(`/api/cameras/${encodeURIComponent(cam.id)}/frame.jpg?t=${Date.now()}`);
+    if (res.ok) { await showFrame(await res.blob()); say('frameMsg', 'saved reference frame', 'ok'); }
+  } else {
+    say('frameMsg', 'no saved frame — load one from this camera to check the marking', '');
+    if (frameImg) draw();
+  }
+}
+$('camSelect').addEventListener('change', async () => {
+  await openCamera($('camSelect').value);
+  showRefStatus();
+});
+
+async function save(makeActive) {
+  const id = $('camId').value.trim();
+  if (!id) return say('saveMsg', 'Give the camera an id first.', 'err');
+  if (platform.length !== 4) return say('saveMsg', 'Mark all 4 platform corners first.', 'err');
+  if (trainStrip.length && trainStrip.length !== 4)
+    return say('saveMsg', 'Finish the train strip (4 corners) or clear it.', 'err');
+  if (doorCrop.length && doorCrop.length !== 4)
+    return say('saveMsg', 'Finish the door crop (4 corners) or clear it.', 'err');
+  syncCoaches();
+  const body = { id, name: $('camName').value.trim() || id, platform, boundaries, coaches,
+                 train_strip: trainStrip.length === 4 ? trainStrip : null,
+                 door_crop: doorCrop.length === 4 ? doorCrop : null,
+                 reference_jpeg_b64: frameB64 };
+  const res = await fetch('/api/cameras', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify(body) });
+  const j = await res.json();
+  if (!res.ok) return say('saveMsg', j.error || 'save failed', 'err');
+  coaches = j.camera.coaches;
+  if (makeActive) {
+    await fetch('/api/cameras/active', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                         body: JSON.stringify({ id }) });
+  }
+  await loadCameras(id);
+  $('camId').disabled = true;
+  say('saveMsg', makeActive ? `Saved. The Control Room now uses "${id}" for the next clip.` : 'Saved.', 'ok');
+  showRefStatus();
+  draw();
+}
+$('btnSave').addEventListener('click', () => save(false));
+$('btnSaveActive').addEventListener('click', () => save(true));
+
+$('btnDelete').addEventListener('click', async () => {
+  const id = $('camSelect').value;
+  if (!id) return say('saveMsg', 'Nothing saved to delete.', 'err');
+  if (!confirm(`Delete camera "${id}" and its calibration?`)) return;
+  await fetch(`/api/cameras/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  await loadCameras('');
+  openCamera('');
+  say('saveMsg', 'Deleted.', 'ok');
+});
+
+$('btnNoCalib').addEventListener('click', async () => {
+  await fetch('/api/cameras/active', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                       body: JSON.stringify({ id: null }) });
+  await loadCameras($('camSelect').value);
+});
+
+/* ---------- tabs ---------- */
+function setTab(t) {
+  const cal = t === 'cal', test = t === 'test', logs = t === 'logs';
+  $('tabCal').classList.toggle('on', cal);
+  $('tabTest').classList.toggle('on', test);
+  $('tabLogs').classList.toggle('on', logs);
+  $('calView').style.display = cal ? 'flex' : 'none';
+  $('testView').style.display = test ? 'block' : 'none';
+  $('logView').style.display = logs ? 'block' : 'none';
+  $('calPanel').style.display = cal ? 'block' : 'none';
+  $('testPanel').style.display = test ? 'block' : 'none';
+  $('logPanel').style.display = logs ? 'block' : 'none';
+  $('modeBadge').style.display = cal && frameImg ? 'block' : 'none';
+  if (logs) loadLogRuns();
+}
+$('tabCal').addEventListener('click', () => setTab('cal'));
+$('tabTest').addEventListener('click', () => setTab('test'));
+$('tabLogs').addEventListener('click', () => setTab('logs'));
+
+/* ---------- testing ----------
+   Each row is one frame: an image, or a moment in a video. The expected
+   numbers are the operator's own hand count inside the marked platform —
+   that's the ground truth the model is scored against. */
+let tests = [];   // { id, file, isVideo, atS, exp, expZ:{A,B,C}, result }
+let nextId = 1;
+
+function isVideo(f) { return (f.type || '').startsWith('video/') || /\.(mp4|avi|mov|mkv|webm)$/i.test(f.name); }
+
+$('btnAddFrames').addEventListener('click', () => $('testFiles').click());
+$('testFiles').addEventListener('change', () => {
+  for (const f of $('testFiles').files) {
+    tests.push({ id: nextId++, file: f, isVideo: isVideo(f), atS: 0, exp: null,
+                 expZ: { A: null, B: null, C: null }, result: null,
+                 preview: isVideo(f) ? null : URL.createObjectURL(f) });
+  }
+  $('testFiles').value = '';
+  renderTests();
+});
+
+function numOrNull(v) { return v === '' || v == null ? null : Math.max(0, Math.round(+v)); }
+
+function errClass(absErr, exp) {
+  const rel = exp ? absErr / exp : absErr;
+  return rel <= 0.1 ? 'err-good' : rel <= 0.25 ? 'err-mid' : 'err-bad';
+}
+
+function renderTests() {
+  $('testEmpty').style.display = tests.length ? 'none' : 'block';
+  $('testTable').style.display = tests.length ? 'table' : 'none';
+  $('testBody').innerHTML = tests.map(t => {
+    const r = t.result;
+    const img = r && r.image_jpeg_b64 ? `data:image/jpeg;base64,${r.image_jpeg_b64}` : t.preview;
+    const thumb = img ? `<img class="thumb" src="${img}" data-full="${img}" />`
+                      : `<div class="ph">${t.isVideo ? 'VIDEO — RUN TO SEE FRAME' : '…'}</div>`;
+    let counted = '—', off = '—', zones = '—', mcnn = '—', err = '—', time = '—';
+    if (r && r.error) {
+      counted = `<span class="err-bad">${r.error}</span>`;
+    } else if (r) {
+      counted = `<b>${r.on_platform}</b><span style="color:var(--dimmer)"> / ${r.detected_total} found</span>`;
+      off = r.off_platform;
+      zones = '<span class="zones">' + ZONES.map(z => {
+        const exp = t.expZ[z];
+        const d = exp == null ? '' : ` <span class="${errClass(Math.abs(r.zones[z] - exp), exp)}">(${r.zones[z] - exp >= 0 ? '+' : ''}${r.zones[z] - exp})</span>`;
+        return `<b style="color:${COACH_HEX[z]}">${z}</b>${r.zones[z]}${d}`;
+      }).join('<br />') + '</span>';
+      mcnn = `${r.density_total}<br /><span style="color:var(--dimmer)">${ZONES.map(z => r.density_zones[z]).join(' · ')}</span>`;
+      if (t.exp != null) {
+        const e = r.on_platform - t.exp;
+        const acc = t.exp ? Math.max(0, 1 - Math.abs(e) / t.exp) : (e === 0 ? 1 : 0);
+        err = `<span class="${errClass(Math.abs(e), t.exp)}">${e >= 0 ? '+' : ''}${e}<br />${Math.round(acc * 100)}%</span>`;
+      }
+      time = `${r.detect_s}s`;
+    } else if (t.running) {
+      counted = 'RUNNING…';
+    }
+    const zInputs = ZONES.map(z => `<input type="number" min="0" data-t="${t.id}" data-z="${z}" placeholder="${z}" value="${t.expZ[z] ?? ''}" />`).join(' ');
+    return `<tr>
+      <td>${thumb}</td>
+      <td style="max-width:160px;word-break:break-all">${t.file.name}</td>
+      <td>${t.isVideo ? `<input type="number" min="0" step="0.5" data-t="${t.id}" data-f="atS" value="${t.atS}" />` : '<span style="color:var(--dimmer)">image</span>'}</td>
+      <td><input type="number" min="0" data-t="${t.id}" data-f="exp" value="${t.exp ?? ''}" /></td>
+      <td style="white-space:nowrap">${zInputs}</td>
+      <td class="num">${counted}</td>
+      <td class="num">${off}</td>
+      <td>${zones}</td>
+      <td class="num">${mcnn}</td>
+      <td class="num">${err}</td>
+      <td class="num">${time}</td>
+      <td><button class="danger" style="margin:0;padding:4px 8px;width:auto" data-del="${t.id}">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  $('testBody').querySelectorAll('input').forEach(inp => inp.addEventListener('change', () => {
+    const t = tests.find(x => x.id === +inp.dataset.t);
+    if (inp.dataset.z) t.expZ[inp.dataset.z] = numOrNull(inp.value);
+    else if (inp.dataset.f === 'atS') { t.atS = Math.max(0, +inp.value || 0); t.result = null; }
+    else t.exp = numOrNull(inp.value);
+    renderTests();
+  }));
+  $('testBody').querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
+    tests = tests.filter(x => x.id !== +b.dataset.del); renderTests();
+  }));
+  $('testBody').querySelectorAll('img.thumb').forEach(im => im.addEventListener('click', () => {
+    $('lightbox').querySelector('img').src = im.dataset.full; $('lightbox').style.display = 'flex';
+  }));
+  renderSummary();
+}
+
+function renderSummary() {
+  const done = tests.filter(t => t.result && !t.result.error);
+  const scored = done.filter(t => t.exp != null);
+  $('sumRun').textContent = done.length;
+  $('sumScored').textContent = scored.length;
+  if (scored.length) {
+    const errs = scored.map(t => Math.abs(t.result.on_platform - t.exp));
+    const accs = scored.map(t => t.exp ? Math.max(0, 1 - Math.abs(t.result.on_platform - t.exp) / t.exp)
+                                       : (t.result.on_platform === 0 ? 1 : 0));
+    $('sumMae').textContent = (errs.reduce((a, b) => a + b, 0) / errs.length).toFixed(1) + ' people';
+    $('sumAcc').textContent = Math.round(100 * accs.reduce((a, b) => a + b, 0) / accs.length) + '%';
+  } else { $('sumMae').textContent = '—'; $('sumAcc').textContent = '—'; }
+  const zErrs = [];
+  done.forEach(t => ZONES.forEach(z => { if (t.expZ[z] != null) zErrs.push(Math.abs(t.result.zones[z] - t.expZ[z])); }));
+  $('sumCoachMae').textContent = zErrs.length ? (zErrs.reduce((a, b) => a + b, 0) / zErrs.length).toFixed(1) + ' people' : '—';
+  $('sumTime').textContent = done.length
+    ? (done.reduce((a, t) => a + t.result.detect_s, 0) / done.length).toFixed(2) + 's' : '—';
+}
+
+$('btnRunAll').addEventListener('click', async () => {
+  if (!tests.length) return say('testMsg', 'Add some frames first.', 'err');
+  const cam = $('testCam').value;
+  $('btnRunAll').disabled = true;
+  let n = 0;
+  for (const t of tests) {
+    n++;
+    say('testMsg', `RUNNING ${n}/${tests.length}…`);
+    t.running = true; t.result = null; renderTests();
+    const form = new FormData();
+    form.append('file', t.file);
+    form.append('camera_id', cam);
+    form.append('at_s', String(t.atS || 0));
+    try {
+      const res = await fetch('/api/test-frame', { method: 'POST', body: form });
+      const j = await res.json();
+      t.result = res.ok ? j : { error: j.error || 'failed' };
+    } catch (e) {
+      t.result = { error: 'server unreachable' };
+    }
+    t.running = false;
+    renderTests();
+  }
+  $('btnRunAll').disabled = false;
+  say('testMsg', `Done — ${tests.length} frame(s) with ${cam ? `camera "${cam}"` : 'no calibration'}.`, 'ok');
+});
+
+$('btnClearTests').addEventListener('click', () => { tests = []; renderTests(); say('testMsg', ''); });
+
+$('btnExport').addEventListener('click', () => {
+  const done = tests.filter(t => t.result && !t.result.error);
+  if (!done.length) return say('testMsg', 'Run some frames first.', 'err');
+  const head = ['file', 'video_at_s', 'camera', 'expected_total', 'counted_on_platform', 'detected_total',
+                'off_platform', 'error', 'abs_error', 'expected_A', 'counted_A', 'expected_B', 'counted_B',
+                'expected_C', 'counted_C', 'mcnn_total', 'detect_s'];
+  const rows = done.map(t => {
+    const r = t.result, e = t.exp == null ? '' : r.on_platform - t.exp;
+    return [t.file.name, t.isVideo ? t.atS : '', r.camera_id || 'thirds', t.exp ?? '', r.on_platform,
+            r.detected_total, r.off_platform, e, e === '' ? '' : Math.abs(e),
+            t.expZ.A ?? '', r.zones.A, t.expZ.B ?? '', r.zones.B, t.expZ.C ?? '', r.zones.C,
+            r.density_total, r.detect_s];
+  });
+  const csv = [head, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `detection_test_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
+  a.click();
+});
+
+/* ---------- reading logs ----------
+   Every reading the Control Room takes is saved (server: reading_logs/). This
+   is where they're checked by eye: the operator's own count goes in beside
+   the model's and is saved with the log, so the comparison survives a reload
+   and builds up into an accuracy figure across runs. */
+let logData = null;   // { run, meta, readings, manual }
+
+function logKey(r) { return `${String(r.frame_index).padStart(6, '0')}_${r.kind}`; }
+function logFile(name) { return `/api/logs/${encodeURIComponent(logData.run)}/files/${encodeURIComponent(name)}`; }
+
+async function loadLogRuns() {
+  const j = await (await fetch('/api/logs')).json();
+  const prev = $('logRun').value;
+  $('logRun').innerHTML = j.runs.map(r =>
+    `<option value="${r.run}">${r.started_at ? r.started_at.replace('T', ' ') : r.run} · ${r.clip || '?'} · ${r.readings} readings`
+    + (r.checked ? ` · ${r.checked} checked` : '') + '</option>').join('');
+  if (!j.runs.length) { logData = null; renderLog(); return; }
+  $('logRun').value = j.runs.some(r => r.run === prev) ? prev : j.runs[0].run;
+  await openLog($('logRun').value);
+}
+
+async function openLog(run) {
+  const res = await fetch(`/api/logs/${encodeURIComponent(run)}`);
+  logData = res.ok ? await res.json() : null;
+  renderLog();
+}
+$('logRun').addEventListener('change', () => openLog($('logRun').value));
+$('btnLogRefresh').addEventListener('click', loadLogRuns);
+
+function renderLog() {
+  const grid = $('logGrid');
+  if (!logData || !logData.readings.length) {
+    grid.innerHTML = ''; $('logEmpty').style.display = 'block'; $('logMeta').textContent = '';
+    renderLogSummary(); return;
+  }
+  $('logEmpty').style.display = 'none';
+  const m = logData.meta, cam = m.camera;
+  $('logMeta').innerHTML = `CLIP <b>${m.clip || '?'}</b> · ${m.fps ? (+m.fps).toFixed(1) + ' fps' : ''}`
+    + ` · every ${m.read_every_s || 0}s<br />CAMERA <b>${cam ? cam.name + ' (' + cam.id + ')' : 'none — frame thirds'}</b>`
+    + (cam ? ` · coaches ${cam.coaches.join(' / ')}` : '');
+  const coachesHere = cam ? [...new Set(cam.coaches)] : ZONES;
+
+  grid.innerHTML = logData.readings.map(r => {
+    const k = logKey(r), mine = logData.manual[k] || { total: null, zones: {} };
+    let err = '';
+    if (mine.total != null) {
+      const e = r.on_platform - mine.total;
+      err = ` · <span class="${errClass(Math.abs(e), mine.total)}">model ${e >= 0 ? '+' : ''}${e}</span>`;
+    }
+    return `<div class="lcard${mine.total != null ? ' checked' : ''}">
+      <img src="${logFile(r.annotated)}" data-full="${logFile(r.annotated)}" loading="lazy" />
+      <div class="hd">${r.kind.toUpperCase()} · ${r.video_s != null ? r.video_s.toFixed(1) + 's' : ''} <span>frame ${r.frame_index}</span></div>
+      <div class="zz">${ZONES.map(z => `<span><b style="color:${COACH_HEX[z]}">${z}</b> ${r.zones[z]}</span>`).join('')}
+        <span>· counted <b>${r.on_platform}</b><span style="color:var(--dimmer)"> / ${r.detected_total} found</span></span></div>
+      <div style="color:var(--dim)">${r.off_platform} off platform${err}</div>
+      <div class="mine"><span class="lbl">MY COUNT</span>
+        <input type="number" min="0" data-k="${k}" data-f="total" placeholder="total" value="${mine.total ?? ''}" />
+        ${coachesHere.map(z => `<input type="number" min="0" data-k="${k}" data-z="${z}" placeholder="${z}" value="${mine.zones?.[z] ?? ''}" />`).join('')}
+      </div>
+      <div class="acts">
+        <button data-raw="${r.raw}">RAW</button>
+        <button data-totest="${r.raw}" data-name="${logData.run}_${r.raw}">→ TEST</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  grid.querySelectorAll('img').forEach(im => im.addEventListener('click', () => {
+    $('lightbox').querySelector('img').src = im.dataset.full; $('lightbox').style.display = 'flex';
+  }));
+  grid.querySelectorAll('[data-raw]').forEach(b => b.addEventListener('click', () => {
+    $('lightbox').querySelector('img').src = logFile(b.dataset.raw); $('lightbox').style.display = 'flex';
+  }));
+  grid.querySelectorAll('[data-totest]').forEach(b => b.addEventListener('click', async () => {
+    const blob = await (await fetch(logFile(b.dataset.totest))).blob();
+    const file = new File([blob], b.dataset.name, { type: 'image/jpeg' });
+    tests.push({ id: nextId++, file, isVideo: false, atS: 0, exp: null,
+                 expZ: { A: null, B: null, C: null }, result: null, preview: URL.createObjectURL(blob) });
+    renderTests();
+    say('logMsg', `Added ${b.dataset.name} to TEST FRAMES.`, 'ok');
+  }));
+  grid.querySelectorAll('.mine input').forEach(inp => inp.addEventListener('change', () => saveManual(inp.dataset.k)));
+  renderLogSummary();
+}
+
+async function saveManual(k) {
+  const val = f => numOrNull(document.querySelector(`.mine input[data-k="${k}"][${f}]`)?.value);
+  const total = val('data-f="total"');
+  const zones = {};
+  ZONES.forEach(z => {
+    const el = document.querySelector(`.mine input[data-k="${k}"][data-z="${z}"]`);
+    if (el && el.value !== '') zones[z] = numOrNull(el.value);
+  });
+  const res = await fetch(`/api/logs/${encodeURIComponent(logData.run)}/manual`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: k, total, zones }) });
+  if (!res.ok) return say('logMsg', 'Could not save that count.', 'err');
+  if (total == null && !Object.keys(zones).length) delete logData.manual[k];
+  else logData.manual[k] = { total, zones };
+  renderLog();
+}
+
+function renderLogSummary() {
+  const rs = logData ? logData.readings : [];
+  const checked = rs.filter(r => logData.manual[logKey(r)]?.total != null);
+  $('lgN').textContent = rs.length;
+  $('lgChecked').textContent = checked.length;
+  if (checked.length) {
+    const errs = checked.map(r => Math.abs(r.on_platform - logData.manual[logKey(r)].total));
+    const accs = checked.map(r => {
+      const t = logData.manual[logKey(r)].total;
+      return t ? Math.max(0, 1 - Math.abs(r.on_platform - t) / t) : (r.on_platform === 0 ? 1 : 0);
+    });
+    $('lgMae').textContent = (errs.reduce((a, b) => a + b, 0) / errs.length).toFixed(1) + ' people';
+    $('lgAcc').textContent = Math.round(100 * accs.reduce((a, b) => a + b, 0) / accs.length) + '%';
+  } else { $('lgMae').textContent = '—'; $('lgAcc').textContent = '—'; }
+  const zErrs = [];
+  rs.forEach(r => {
+    const mz = logData.manual[logKey(r)]?.zones || {};
+    Object.entries(mz).forEach(([z, v]) => { if (v != null) zErrs.push(Math.abs(r.zones[z] - v)); });
+  });
+  $('lgCoachMae').textContent = zErrs.length
+    ? (zErrs.reduce((a, b) => a + b, 0) / zErrs.length).toFixed(1) + ' people' : '—';
+}
+
+$('btnLogExport').addEventListener('click', () => {
+  if (!logData || !logData.readings.length) return say('logMsg', 'Nothing to export.', 'err');
+  const head = ['run', 'clip', 'camera', 'kind', 'frame_index', 'video_s', 'counted_on_platform',
+                'detected_total', 'off_platform', 'counted_A', 'counted_B', 'counted_C',
+                'my_total', 'my_A', 'my_B', 'my_C', 'error', 'abs_error'];
+  const rows = logData.readings.map(r => {
+    const m = logData.manual[logKey(r)] || { total: null, zones: {} };
+    const e = m.total == null ? '' : r.on_platform - m.total;
+    return [logData.run, logData.meta.clip || '', r.camera_id || 'thirds', r.kind, r.frame_index,
+            r.video_s ?? '', r.on_platform, r.detected_total, r.off_platform,
+            r.zones.A, r.zones.B, r.zones.C, m.total ?? '', m.zones?.A ?? '', m.zones?.B ?? '',
+            m.zones?.C ?? '', e, e === '' ? '' : Math.abs(e)];
+  });
+  const csv = [head, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `reading_log_${logData.run}.csv`;
+  a.click();
+});
+
+$('btnLogDelete').addEventListener('click', async () => {
+  if (!logData) return;
+  if (!confirm(`Delete the log for "${logData.run}"? Its saved frames and your counts are removed.`)) return;
+  await fetch(`/api/logs/${encodeURIComponent(logData.run)}`, { method: 'DELETE' });
+  say('logMsg', 'Deleted.', 'ok');
+  loadLogRuns();
+});
+
+$('lightbox').addEventListener('click', () => { $('lightbox').style.display = 'none'; });
+
+loadCameras('').then(() => openCamera(''));
+</script>
