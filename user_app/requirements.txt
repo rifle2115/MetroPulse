@@ -1,0 +1,5 @@
+# The passenger app is stdlib-only itself; the crowd forecast it serves comes
+# from pipeline/prediction/forecaster.py, which loads the committed
+# models/forecaster.joblib with joblib and needs scikit-learn to unpickle it.
+# Reusing that file keeps the two from drifting apart.
+-r ../pipeline/prediction/requirements.txt

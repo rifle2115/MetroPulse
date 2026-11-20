@@ -1,6 +1,10 @@
 torch>=2.8.0
+torchvision>=0.23.0
 scipy>=1.16.0
 numpy>=2.1.0
 pillow>=10.4.0
 opencv-python>=4.12.0
 paho-mqtt>=2.1.0
+# person_counter.py's CLI and the Control Room's tiled detector both use
+# ultralytics; door_state.py (train detection) uses torchvision.
+ultralytics>=8.3.0

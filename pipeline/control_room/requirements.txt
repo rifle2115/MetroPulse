@@ -6,3 +6,12 @@ numpy>=2.1.0
 torch>=2.8.0
 paho-mqtt>=2.1.0
 scipy>=1.16.0
+# Imported through pipeline/mcnn, which the Control Room loads directly:
+# person_counter.py runs the YOLO detector (ultralytics) and door_state.py
+# (train-arrival detection) is a torchvision model.
+ultralytics>=8.3.0
+torchvision>=0.23.0
+# server.py imports pipeline/prediction/baseline_engine.py for expected_level(),
+# which reads data/station-hourly.parquet with pandas.
+pandas>=2.2.0
+pyarrow>=21.0.0

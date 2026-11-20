@@ -58,8 +58,18 @@ the transport layer.
 Install Python dependencies once:
 
 ```bash
-pip install -r pipeline/control_room/requirements.txt -r pipeline/mcnn/requirements.txt -r pipeline/prediction/requirements.txt -r pipeline/scripts/requirements.txt
+pip install \
+  -r pipeline/control_room/requirements.txt \
+  -r pipeline/mcnn/requirements.txt \
+  -r pipeline/prediction/requirements.txt \
+  -r pipeline/scripts/requirements.txt \
+  -r user_app/requirements.txt
 ```
+
+That installs everything all five processes need, including the passenger app's
+forecast model (`scikit-learn` + `joblib`), the YOLO detector (`ultralytics`)
+and the train detector (`torchvision`). Run it inside the project venv so every
+terminal below uses the same interpreter.
 
 ### Start the five processes
 
