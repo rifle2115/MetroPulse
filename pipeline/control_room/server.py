@@ -9,7 +9,8 @@ One clip = one station's dwell. This bookends every clip on
 metropulse/<station>/control/train so the Twin's service follows the
 operator rather than its own timer: "arrive" fires the moment processing
 starts (the Twin brings the train in and HOLDS at the platform), then when
-the clip ends "announce" fires immediately and "depart" 10s later. Without
+the clip ends "announce" fires immediately and "depart" a few seconds later
+(TRAIN_DEPART_DELAY_S). Without
 the opening "arrive" the Twin had nothing telling it a station's crowd was
 now being fed to it, so from the second stop on it just ran its own dwell
 timer and pulled out before the clip had been loaded. See
@@ -85,7 +86,12 @@ CRLF = ("\r\n").encode()
 MJPEG_BOUNDARY = ("--frame\r\nContent-Type: image/jpeg\r\n\r\n").encode()
 
 PLAYBACK_SPEED = 1.0   # true source speed — 30fps footage plays at 30fps
-TRAIN_DEPART_DELAY_S = 10.0
+# Minimum time between "announce" and "depart". The Twin's STARTING TRAIN
+# banner is up for 3s; the rest of this is margin for the dwell readings to
+# reach the decision engine before the doors close. Was 10s back when those
+# readings were computed inside this window; they are now read during
+# playback (see DwellPrereader), so only publishing them is left here.
+TRAIN_DEPART_DELAY_S = 4.0
 
 # Everything time-related here is Bangalore local time, because that's what
 # the ridership data behind expected_level() is. Pinning it explicitly (not
@@ -376,20 +382,31 @@ def set_preview(image: np.ndarray) -> None:
             state["last_frame_jpeg"] = buf.tobytes()
 
 
-def take_reading(counter: PersonCounter, frame: np.ndarray, label: str,
-                 frame_index: int = 0, preview: bool = True) -> dict:
-    """One of the two readings a clip gets. Runs tiled detection and MCNN on
-    this single frame, publishes the telemetry the decision engine turns into
-    boarding, and leaves the annotated frame on the preview so the operator can
-    see what was actually counted."""
-    t0 = time.time()
+def measure_frame(counter: PersonCounter, frame: np.ndarray) -> tuple[dict, list]:
+    """Detection + MCNN on one frame, nothing published. Both models are
+    stateless per frame, so the same frame always gives the same numbers no
+    matter when or on which thread it is read."""
     counter.update(frame)
     counts = dict(counter.zone_people)
-
     with torch.no_grad():
         small = resize_max(frame, MAX_FRAME_DIM)
         density = model(frame_to_tensor(small).to(device))[0, 0].cpu().numpy()
-    density_counts = zone_counts(density)
+    return counts, zone_counts(density)
+
+
+def take_reading(counter: PersonCounter, frame: np.ndarray, label: str,
+                 frame_index: int = 0, preview: bool = True,
+                 measured: tuple[dict, list] | None = None) -> dict:
+    """One of the two readings a clip gets. Runs tiled detection and MCNN on
+    this single frame, publishes the telemetry the decision engine turns into
+    boarding, and leaves the annotated frame on the preview so the operator can
+    see what was actually counted. `measured` hands in a result already
+    computed by DwellPrereader, so only the publishing happens here."""
+    t0 = time.time()
+    if measured is None:
+        counts, density_counts = measure_frame(counter, frame)
+    else:
+        counts, density_counts = measured
 
     detected = [float(counts[z]) for z in ZONE_IDS]
     publish_zone_telemetry(detected, density_counts, frame_index)
@@ -416,8 +433,93 @@ def take_reading(counter: PersonCounter, frame: np.ndarray, label: str,
         set_preview(shot)
 
     print(f"[control-room] {label}: {counts} (total {sum(counts.values())}) "
-          f"in {time.time() - t0:.1f}s", flush=True)
+          f"in {time.time() - t0:.1f}s{' (read during playback)' if measured else ''}", flush=True)
     return counts
+
+
+def dwell_indices(last_index: int) -> list[int]:
+    """Frames the mid-dwell samples are taken from — shared by the live path
+    and the prereader so both always pick exactly the same frames."""
+    if last_index < 4 or DWELL_SAMPLES < 3:
+        return []
+    return [round(k * last_index / (DWELL_SAMPLES - 1)) for k in range(1, DWELL_SAMPLES - 1)]
+
+
+class DwellPrereader:
+    """Reads the mid-dwell samples in the background while the clip plays,
+    instead of one after another once it has finished (which kept the train
+    waiting 10-50s after every clip).
+
+    The samples' frame numbers depend only on the clip's length, which the
+    file header gives up front. Nothing is published from here: results are
+    held until the clip has ended and are then published in the original
+    order, so the decision engine receives exactly the messages it did before,
+    just sooner. If the clip turns out to end on a different frame than the
+    header said (or the operator stops it early), the results are discarded
+    and the old after-playback path runs instead.
+
+    One reading at a time, on its own detector instance, so playback keeps
+    most of the CPU."""
+
+    def __init__(self, video_path: str, stop_ev: threading.Event):
+        cap = cv2.VideoCapture(video_path)
+        n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        cap.release()
+        self.planned_last = n - 1
+        self.indices = dwell_indices(self.planned_last) if n > 0 else []
+        self.results: dict[int, tuple[dict, list]] = {}
+        self._path, self._stop = video_path, stop_ev
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        if self.indices:
+            self._thread.start()
+
+    def _run(self) -> None:
+        try:
+            counter = PersonCounter()
+            cap = cv2.VideoCapture(self._path)
+            try:
+                for idx in self.indices:
+                    if self._stop.is_set():
+                        return
+                    # identical seek-and-read to sample_dwell, so the frame
+                    # (and therefore the reading) is the same one it would get
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                    ok, frame = cap.read()
+                    if not ok:
+                        continue
+                    self.results[idx] = measure_frame(counter, resize_max(frame, SOURCE_MAX_DIM))
+            finally:
+                cap.release()
+        except Exception as exc:   # noqa: BLE001 — fallback path covers it
+            print(f"[control-room] dwell prereader failed ({exc!r}); will read after playback", flush=True)
+
+    def usable_for(self, last_index: int) -> bool:
+        return bool(self.indices) and last_index == self.planned_last
+
+    def publish(self, counter: PersonCounter, video_path: str, last_index: int,
+                stop_ev: threading.Event, superseded_ev: threading.Event) -> None:
+        """Publish the held readings in order. Waits for any still in progress
+        (no slower than reading them now); any frame it could not read is
+        read here the old way."""
+        if self._thread.is_alive():
+            self._thread.join()
+        missing = [i for i in self.indices if i not in self.results]
+        cap = cv2.VideoCapture(video_path) if missing else None
+        try:
+            for k, idx in enumerate(self.indices, start=1):
+                if stop_ev.is_set() or superseded_ev.is_set():
+                    return
+                label = f"DWELL {k}/{DWELL_SAMPLES - 2} frame {idx}"
+                if idx in self.results:
+                    take_reading(counter, None, label, idx, preview=False, measured=self.results[idx])
+                    continue
+                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                ok, frame = cap.read()
+                if ok:
+                    take_reading(counter, resize_max(frame, SOURCE_MAX_DIM), label, idx, preview=False)
+        finally:
+            if cap is not None:
+                cap.release()
 
 
 def process_video(video_path: str, source_name: str,
@@ -495,8 +597,11 @@ def _process_video(video_path: str, source_name: str,
     with state_lock:
         state["phase"] = "reading"
     counts = take_reading(counter, frame, "BEFORE - platform as the service arrives", 0)
+    # started after BEFORE so it never slows the first reading down
+    prereader = DwellPrereader(video_path, stop_ev)
     with state_lock:
         state["phase"] = "playing"
+    play_started = time.time()
 
     finished_naturally = False
     last_frame = frame
@@ -527,6 +632,11 @@ def _process_video(video_path: str, source_name: str,
         last_frame = nxt
         last_index += 1
 
+    played_s = time.time() - play_started
+    if last_index and played_s > 0:
+        print(f"[control-room] played {last_index} frames in {played_s:.1f}s "
+              f"({last_index / played_s / fps:.2f}x real time)", flush=True)
+
     with state_lock:
         state["phase"] = "reading"
 
@@ -541,9 +651,13 @@ def _process_video(video_path: str, source_name: str,
     print(f"[control-room] stopped processing {source_name}", flush=True)
 
     reason = "video finished" if finished_naturally else "stopped by operator"
-    hand_off_to_twin(reason, superseded_ev,
-                     during=lambda: sample_dwell(video_path, counter, last_index,
-                                                 stop_ev, superseded_ev))
+    if prereader.usable_for(last_index):
+        during = lambda: prereader.publish(counter, video_path, last_index, stop_ev, superseded_ev)
+    else:
+        # stopped early or the header's frame count was off: the readings
+        # would be for the wrong frames, so read them the original way
+        during = lambda: sample_dwell(video_path, counter, last_index, stop_ev, superseded_ev)
+    hand_off_to_twin(reason, superseded_ev, during=during)
 def sample_dwell(video_path: str, counter: PersonCounter, last_index: int,
                  stop_ev: threading.Event, superseded_ev: threading.Event) -> None:
     """Read a few more frames from across the clip, so the decision engine sees
@@ -555,14 +669,14 @@ def sample_dwell(video_path: str, counter: PersonCounter, last_index: int,
     (alighting). Deliberately run after playback, during the announce window,
     where the Twin is already showing STARTING TRAIN and nobody is waiting on
     this."""
-    if last_index < 4 or DWELL_SAMPLES < 3:
+    indices = dwell_indices(last_index)
+    if not indices:
         return
     cap = cv2.VideoCapture(video_path)
     try:
-        for k in range(1, DWELL_SAMPLES - 1):        # the ends are already read
+        for k, idx in enumerate(indices, start=1):    # the ends are already read
             if stop_ev.is_set() or superseded_ev.is_set():
                 return
-            idx = round(k * last_index / (DWELL_SAMPLES - 1))
             cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
             ok, frame = cap.read()
             if not ok:
@@ -647,6 +761,9 @@ def index():
 class ChangeTimeQuery(BaseModel):
     date: str   # "YYYY-MM-DD"
     hour: int   # 0-23
+    # USE CURRENT IST: ignore date/hour and set the clock to this exact
+    # second, rather than snapping back to the top of the hour
+    now: bool = False
 
 
 @app.post("/api/change-time")
@@ -657,10 +774,13 @@ def change_time(q: ChangeTimeQuery):
     crowd level for that date/hour, real BMRCL-data-backed) and control/time
     (tells the Twin to offset its displayed clock to match), both retained
     so a Twin tab that connects later still shows the jumped time."""
-    try:
-        dt = datetime.strptime(f"{q.date} {q.hour:02d}", "%Y-%m-%d %H").replace(tzinfo=IST)
-    except ValueError:
-        return JSONResponse({"error": "invalid date or hour"}, status_code=400)
+    if q.now:
+        dt = datetime.now(IST).replace(microsecond=0)
+    else:
+        try:
+            dt = datetime.strptime(f"{q.date} {q.hour:02d}", "%Y-%m-%d %H").replace(tzinfo=IST)
+        except ValueError:
+            return JSONResponse({"error": "invalid date or hour"}, status_code=400)
 
     level, reason = publish_baseline(dt)
     time_payload = {
@@ -675,7 +795,7 @@ def change_time(q: ChangeTimeQuery):
     mqtt_client.publish(f"metropulse/{STATION_ID}/control/time", json.dumps(time_payload), qos=1, retain=True)
     with state_lock:
         state["sim_offset_ms"] = int(dt.timestamp() * 1000 - time.time() * 1000)
-    return {"expected_level": level, "reason": reason}
+    return {"expected_level": level, "reason": reason, "set_to": dt.strftime("%Y-%m-%d %H:%M:%S")}
 
 
 @app.post("/api/reset-occupancy")

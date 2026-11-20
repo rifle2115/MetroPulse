@@ -351,20 +351,22 @@ $('btnNowIST').addEventListener('click', async () => {
   tickClock();
   // push it so the Twin comes back to real time too, rather than the two
   // consoles quietly disagreeing about what time it is
-  await changeTime(predDate.value, +predHour.value);
+  // now:true — the server sets the exact current second, not HH:00
+  await changeTime(predDate.value, +predHour.value, true);
 });
 
-async function changeTime(date, hour) {
+async function changeTime(date, hour, now = false) {
   predResult.textContent = 'CHANGING…';
   const res = await fetch('/api/change-time', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ date, hour })
+    body: JSON.stringify({ date, hour, now })
   });
   if (!res.ok) { predResult.textContent = 'ERROR — CHECK DATE/HOUR'; return; }
-  const { expected_level, reason } = await res.json();
+  const { expected_level, reason, set_to } = await res.json();
   const hex = HEX[expected_level] || '#fff';
-  predResult.innerHTML = `TWIN CLOCK SET TO ${date} ${String(hour).padStart(2, '0')}:00 IST<br />`
+  const shown = set_to ? set_to.slice(0, 16) : `${date} ${String(hour).padStart(2, '0')}:00`;
+  predResult.innerHTML = `TWIN CLOCK SET TO ${shown} IST<br />`
     + `<b style="color:${hex}">${expected_level.toUpperCase()}</b> predicted<br /><span style="color:var(--dim)">${reason}</span>`;
 }
 

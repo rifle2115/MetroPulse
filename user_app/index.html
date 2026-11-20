@@ -1,616 +1,832 @@
+<!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#0a0d14" />
-<title>MetroPulse — Where to Board</title>
+<meta name="theme-color" content="#d7ecfb" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="MetroPulse" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<title>MetroPulse</title>
 
 <style>
-  /* ------------------------------------------------------------------ *
-     Passenger app. Phone-first: this is the one part of MetroPulse that
-     is not an operator tool, so it answers exactly one question the
-     moment it opens — WHICH COACH DO I STAND AT — and everything else on
-     the screen is supporting evidence for that answer.
-   * ------------------------------------------------------------------ */
-  :root{
-    --bg:#0a0d14;
-    --card:#121826;
-    --card-hi:#18203247;
-    --line:rgba(126,160,205,.14);
-    --line-hi:rgba(126,160,205,.30);
-    --txt:#e8eef7;
-    --dim:#8fa3bd;
-    --dimmer:#5d7392;
-    --low:#2ee27a;
-    --med:#ffb020;
-    --high:#ff4d5e;
-    --brand:#7b5cd6;
-    --brand2:#2ea3d8;
-    --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
-    --mono:"JetBrains Mono","SF Mono",Consolas,monospace;
-    --r:18px;
-  }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--sans);
-    -webkit-font-smoothing:antialiased;overscroll-behavior-y:none}
-  body{padding:0 0 34px;max-width:520px;margin:0 auto;min-height:100vh;position:relative}
+/* ==========================================================================
+   MetroPulse passenger app — sky blue + green.
+   LIVE: which coach to board (station feed over MQTT).
+   FORECAST: crowd prediction from the model in pipeline/prediction.
+   ========================================================================== */
+:root{
+  --sky-0:#f4faff; --sky-1:#e6f3fd; --sky-2:#cfe7fb; --sky-3:#a8d4f6; --sky-4:#5aa9e6; --sky-5:#2b7fc4;
+  --green:#1fa971; --green-2:#34c48a; --green-soft:#dcf4e9; --green-ink:#0d6b46;
+  --amber:#d98a1c; --amber-soft:#fcefd9;
+  --coral:#d9534f; --coral-soft:#fbe3e2;
+  --ink:#0f2a3d; --ink-2:#3d5a70; --muted:#6b8599; --faint:#9db1c1;
+  --glass:rgba(255,255,255,.55); --glass-line:rgba(255,255,255,.75);
+  --sheet:#ffffff; --line:#e7eef4;
+  --serif:"Instrument Serif",Georgia,"Times New Roman",serif;
+  --sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;
+  font-size:15px;line-height:1.45;background:var(--sky-1)}
+body{min-height:100vh;min-height:100dvh;
+  background:linear-gradient(180deg,var(--sky-2) 0%,var(--sky-1) 46%,var(--sky-0) 100%) fixed}
+/* crowd level tints the sky: calm when quiet, warmer when busy */
+body.lv-med{background:linear-gradient(180deg,#d9e9f6 0%,#eef2f3 46%,#f7f8f6 100%) fixed}
+body.lv-high{background:linear-gradient(180deg,#e7e2ee 0%,#f6efea 46%,#fbf7f3 100%) fixed}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.num{font-variant-numeric:tabular-nums}
+.hide{display:none !important}
+em.s{font-family:var(--serif);font-style:italic;font-weight:400;letter-spacing:0}
 
-  /* soft brand wash behind the top of the page */
-  body::before{content:"";position:fixed;top:0;left:0;right:0;height:340px;z-index:-1;
-    background:radial-gradient(120% 80% at 50% 0%, #2a2150 0%, #141a2b 42%, var(--bg) 78%)}
+.shell{max-width:460px;margin:0 auto;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
 
-  /* ---------------- header ---------------- */
-  header{padding:18px 20px 6px;display:flex;align-items:center;gap:12px}
-  .mark{width:34px;height:34px;border-radius:11px;flex:none;position:relative;
-    background:linear-gradient(145deg,var(--brand),var(--brand2));
-    box-shadow:0 6px 18px -6px var(--brand)}
-  .mark::after{content:"";position:absolute;inset:11px 9px;border-radius:2px;
-    background:#fff;opacity:.92;
-    clip-path:polygon(0 40%,100% 0,100% 60%,0 100%)}
-  .brand{flex:1;min-width:0}
-  .brand b{display:block;font-size:15px;letter-spacing:.02em;font-weight:650}
-  .brand span{display:block;font-size:9.5px;letter-spacing:.1em;color:var(--dim);
-    text-transform:uppercase;margin-top:3px;white-space:nowrap;overflow:hidden;
-    text-overflow:ellipsis}
-  .clock{text-align:right;font-family:var(--mono);flex:none}
-  .clock b{display:block;font-size:16px;font-variant-numeric:tabular-nums;font-weight:500}
-  .clock span{display:block;font-size:9.5px;letter-spacing:.1em;color:var(--dim);margin-top:2px}
+/* ------------------------------- header --------------------------------- */
+.top{display:flex;align-items:center;justify-content:space-between;
+  padding:calc(14px + env(safe-area-inset-top)) 22px 0}
+.brand{font-weight:700;font-size:16px;letter-spacing:-.01em}
+.brand span{color:var(--sky-5)}
+.status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-2);font-weight:500;
+  background:var(--glass);border:1px solid var(--glass-line);padding:6px 11px;border-radius:999px;
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.status i{width:7px;height:7px;border-radius:50%;background:var(--faint)}
+.status.ok i{background:var(--green)}
+.status.bad i{background:var(--coral)}
 
-  /* connection pill */
-  #conn{margin:8px 20px 0;display:flex;align-items:center;gap:7px;font-size:10.5px;
-    letter-spacing:.1em;color:var(--dim);text-transform:uppercase}
-  #conn i{width:6px;height:6px;border-radius:50%;background:var(--dimmer);flex:none}
-  #conn.ok i{background:var(--low);box-shadow:0 0 9px var(--low);animation:pulse 2.4s infinite}
-  #conn.bad i{background:var(--high);box-shadow:0 0 9px var(--high)}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+/* ------------------------------ hero area ------------------------------- */
+.hero{padding:22px 22px 26px}
+.eyebrow{font-size:13px;color:var(--ink-2);font-weight:500}
+.hero h1{margin:6px 0 0;font-size:36px;line-height:1.05;font-weight:600;letter-spacing:-.025em}
+.hero h1 em.s{font-size:42px;color:var(--sky-5)}
+.hero p.lead{margin:8px 0 0;font-size:14.5px;color:var(--ink-2);max-width:34ch}
 
-  /* ---------------- station ---------------- */
-  .station{padding:14px 20px 4px}
-  .station .now{font-size:10.5px;letter-spacing:.16em;color:var(--dim);text-transform:uppercase}
-  .station h1{margin:5px 0 0;font-size:30px;line-height:1.1;font-weight:680;letter-spacing:-.02em}
-  .station .next{margin-top:7px;font-size:12.5px;color:var(--dim);display:flex;align-items:center;gap:6px}
-  .station .next b{color:var(--txt);font-weight:550}
+.glass{background:var(--glass);border:1px solid var(--glass-line);border-radius:24px;
+  -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);box-shadow:0 8px 30px -12px rgba(43,127,196,.25)}
 
-  /* line progress */
-  .line{display:flex;align-items:center;gap:0;padding:16px 20px 4px}
-  .line .stop{flex:1;height:3px;border-radius:2px;background:#232c40;position:relative}
-  .line .stop.done{background:linear-gradient(90deg,var(--brand),var(--brand2))}
-  .line .stop.here::after{content:"";position:absolute;right:-4px;top:-3.5px;width:10px;height:10px;
-    border-radius:50%;background:#fff;box-shadow:0 0 0 3px var(--bg),0 0 12px var(--brand2)}
-  .line .stop+.stop{margin-left:4px}
+/* station line */
+.route{margin-top:18px;padding:14px 16px}
+.route .row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);font-weight:500}
+.route .row b{color:var(--ink);font-weight:600}
+.stops{display:flex;align-items:center;margin:12px 2px 0}
+.stops .s{width:9px;height:9px;border-radius:50%;background:#fff;border:2px solid var(--sky-3);flex:none}
+.stops .s.done{background:var(--sky-5);border-color:var(--sky-5)}
+.stops .s.here{width:15px;height:15px;border:4px solid var(--green);background:#fff;box-shadow:0 0 0 4px rgba(31,169,113,.15)}
+.stops .seg{flex:1;height:2px;background:var(--sky-3)}
+.stops .seg.done{background:var(--sky-5)}
 
-  /* ---------------- hero recommendation ---------------- */
-  #rec{margin:16px 16px 0;padding:20px;border-radius:var(--r);position:relative;overflow:hidden;
-    background:linear-gradient(150deg,#1c2b22,#141d2c 70%);border:1px solid #2c5a41}
-  #rec.wait{background:linear-gradient(150deg,#1d2233,#141a28 70%);border-color:var(--line-hi)}
-  #rec .lbl{font-size:10.5px;letter-spacing:.17em;color:#7fe0a8;text-transform:uppercase;font-weight:600}
-  #rec.wait .lbl{color:var(--dim)}
-  #rec .big{margin-top:9px;font-size:34px;font-weight:730;letter-spacing:-.02em;line-height:1.05}
-  #rec .sub{margin-top:8px;font-size:13px;color:var(--dim);line-height:1.5}
-  #rec .arrow{position:absolute;right:-14px;bottom:-20px;font-size:110px;line-height:1;
-    opacity:.10;font-weight:800}
+/* coach rings */
+.rings{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
+.ring{padding:14px 8px 12px;text-align:center;position:relative;transition:transform .3s}
+.ring svg{width:76px;height:76px;display:block;margin:0 auto}
+.ring .pct{font-size:17px;font-weight:700}
+.ring .nm{margin-top:6px;font-size:13px;font-weight:600}
+.ring .sub{font-size:11.5px;color:var(--muted)}
+.ring.best{background:rgba(255,255,255,.85);border-color:var(--green)}
+.ring .tag{position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--green);
+  color:#fff;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
 
-  /* ---------------- coaches ---------------- */
-  .sect{padding:22px 20px 9px;font-size:10.5px;letter-spacing:.16em;color:var(--dim);
-    text-transform:uppercase;display:flex;justify-content:space-between;align-items:baseline}
-  .sect em{font-style:normal;color:var(--dimmer);letter-spacing:.04em;text-transform:none;font-size:11px}
+/* crowd gauge (forecast) */
+.gauge-wrap{display:flex;flex-direction:column;align-items:center;margin-top:18px}
+.gauge{position:relative;width:236px;height:236px}
+.gauge svg{width:100%;height:100%;display:block}
+.gauge .c{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.gauge .c small{font-size:12px;color:var(--muted);font-weight:500}
+.gauge .c b{font-size:52px;font-weight:600;letter-spacing:-.03em;line-height:1.05;margin-top:2px}
+.gauge .c span{font-size:12.5px;color:var(--ink-2)}
+.gauge .c .w{margin-top:6px;font-family:var(--serif);font-style:italic;font-size:22px}
 
-  #coaches{padding:0 16px;display:flex;flex-direction:column;gap:10px}
-  .coach{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
-    padding:14px 16px;position:relative;transition:border-color .25s,transform .25s}
-  .coach.best{border-color:#2f7a51;background:linear-gradient(180deg,#152318,var(--card) 60%)}
-  .coach .top{display:flex;align-items:center;gap:10px}
-  .coach .nm{font-size:15px;font-weight:620;flex:1;display:flex;align-items:center;gap:8px}
-  .coach .nm u{text-decoration:none;font-size:10px;letter-spacing:.1em;color:var(--dimmer);
-    font-weight:500}
-  .coach .pill{font-size:9.5px;letter-spacing:.12em;padding:3px 8px;border-radius:20px;
-    font-weight:650;text-transform:uppercase}
-  .coach .cnt{font-family:var(--mono);font-size:14px;font-variant-numeric:tabular-nums;
-    color:var(--dim);flex:none}
-  .coach .cnt b{color:var(--txt);font-size:17px}
-  .bar{margin-top:11px;height:7px;border-radius:5px;background:#1d2434;overflow:hidden;display:flex}
-  .bar i{display:block;height:100%;transition:width .5s cubic-bezier(.2,.8,.2,1)}
-  .bar i.q{opacity:.42}
-  .coach .foot{margin-top:8px;font-size:11.5px;color:var(--dimmer);display:flex;
-    justify-content:space-between}
-  .badge{position:absolute;top:-8px;right:14px;background:var(--low);color:#06240f;
-    font-size:9px;letter-spacing:.1em;font-weight:750;padding:3px 9px;border-radius:20px;
-    text-transform:uppercase}
+.chips{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:18px}
+.chip{font-size:13px;font-weight:500;color:var(--ink-2);padding:8px 14px;border-radius:999px;
+  border:1px dashed var(--sky-4);background:rgba(255,255,255,.35)}
+.chip[aria-pressed="true"]{border-style:solid;border-color:var(--ink);background:var(--ink);color:#fff}
 
-  /* ---------------- forecast ---------------- */
-  #fc{margin:0 16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);
-    padding:16px;display:flex;gap:14px;align-items:flex-start}
-  #fc .ico{width:40px;height:40px;border-radius:12px;flex:none;display:grid;place-items:center;
-    font-size:19px}
-  #fc .body{flex:1;min-width:0}
-  #fc .lvl{font-size:15px;font-weight:650;letter-spacing:-.01em}
-  #fc .why{margin-top:4px;font-size:12.5px;color:var(--dim);line-height:1.5}
-  #fc .tag{display:inline-block;margin-top:9px;font-size:10px;letter-spacing:.1em;
-    text-transform:uppercase;padding:3px 9px;border-radius:20px;font-weight:650;
-    background:#1d2434;color:var(--dim)}
+/* ------------------------------ bottom sheet ---------------------------- */
+.sheet{flex:1;background:var(--sheet);border-radius:28px 28px 0 0;padding:10px 20px calc(110px + env(safe-area-inset-bottom));
+  box-shadow:0 -10px 40px -20px rgba(15,42,61,.25)}
+.grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 14px}
+.sh{display:flex;justify-content:space-between;align-items:baseline;margin:18px 0 10px}
+.sh h2{margin:0;font-size:15px;font-weight:600}
+.sh span{font-size:12px;color:var(--muted)}
+.sh:first-of-type{margin-top:4px}
 
-  /* two Twins publishing at once */
-  #warn{margin:12px 16px 0;padding:12px 14px;border-radius:14px;
-    background:#2b1519;border:1px solid #5e2831;font-size:12px;color:#ffb3bc;
-    line-height:1.5}
-  #warn b{color:#fff}
+.list{border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.li{display:flex;align-items:center;gap:12px;padding:14px 16px}
+.li+.li{border-top:1px solid var(--line)}
+.li .k{flex:1;min-width:0}
+.li .k b{display:block;font-size:14.5px;font-weight:600}
+.li .k span{display:block;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li .v{text-align:right;font-size:13px;color:var(--ink-2)}
+.li .v b{font-size:15px;color:var(--ink);font-weight:600}
+.meter{width:84px;height:6px;border-radius:3px;background:var(--sky-1);overflow:hidden;flex:none}
+.meter i{display:block;height:100%;border-radius:3px;transition:width .6s cubic-bezier(.2,.8,.2,1)}
 
-  /* ---------------- train status ---------------- */
-  #train{margin:12px 16px 0;padding:13px 16px;border-radius:14px;background:var(--card-hi);
-    border:1px solid var(--line);font-size:12.5px;color:var(--dim);display:flex;
-    align-items:center;gap:10px}
-  #train i{width:7px;height:7px;border-radius:50%;background:var(--brand2);flex:none;
-    box-shadow:0 0 9px var(--brand2)}
-  #train b{color:var(--txt);font-weight:600}
+.pill{display:inline-block;font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px}
+.pill.low{background:var(--green-soft);color:var(--green-ink)}
+.pill.med{background:var(--amber-soft);color:#8a560c}
+.pill.high{background:var(--coral-soft);color:#a3302d}
 
-  footer{padding:22px 20px 8px;font-size:10.5px;color:var(--dimmer);line-height:1.7;text-align:center}
-  footer a{color:var(--dim)}
+.tease{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:16px;border-radius:18px;
+  background:linear-gradient(120deg,var(--sky-1),var(--green-soft))}
+.tease .k{flex:1}
+.tease .k small{font-size:12px;color:var(--ink-2);font-weight:500}
+.tease .k b{display:block;font-size:17px;font-weight:600;margin-top:2px}
+.tease .k span{font-size:13px;color:var(--ink-2)}
+.tease .go{font-size:13px;font-weight:600;color:var(--sky-5);white-space:nowrap}
 
-  /* empty / disconnected state */
-  #empty{padding:60px 30px;text-align:center;color:var(--dim)}
-  #empty .e{font-size:40px;opacity:.4}
-  #empty p{margin:14px 0 0;font-size:13.5px;line-height:1.6}
-  #empty code{font-family:var(--mono);font-size:11.5px;color:var(--txt);background:#1a2131;
-    padding:2px 6px;border-radius:5px}
-  .hide{display:none !important}
+.note{font-size:13px;color:var(--ink-2);padding:13px 16px;border-radius:16px;background:var(--coral-soft);margin-top:12px}
+
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{border:1px solid var(--line);border-radius:18px;padding:14px}
+.stat small{font-size:12px;color:var(--muted);font-weight:500}
+.stat b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em;margin-top:4px}
+.stat span{font-size:12.5px;color:var(--ink-2)}
+
+.chart{border:1px solid var(--line);border-radius:18px;padding:14px 10px 10px}
+.readout{display:flex;justify-content:space-between;align-items:baseline;padding:0 6px 6px}
+.readout b{font-size:14px;font-weight:600}
+.readout span{font-size:13px;color:var(--ink-2)}
+#chart{width:100%;height:176px;display:block;touch-action:pan-y}
+.key{display:flex;gap:16px;padding:6px 6px 0;font-size:11.5px;color:var(--muted)}
+.key span{display:flex;align-items:center;gap:6px}
+.key i{width:14px;height:3px;border-radius:2px;background:var(--green)}
+.key i.b{height:10px;background:var(--sky-2)}
+
+.about{font-size:13.5px;color:var(--ink-2);line-height:1.6}
+.about b{color:var(--ink);font-weight:600}
+.foot{font-size:12px;color:var(--faint);text-align:center;margin:22px 4px 0;line-height:1.6}
+
+/* ------------------------------- tab bar -------------------------------- */
+.tabs{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));z-index:20;
+  display:flex;gap:4px;padding:5px;border-radius:999px;background:var(--ink);box-shadow:0 12px 30px -10px rgba(15,42,61,.55)}
+.tab{font-size:14px;font-weight:600;color:rgba(255,255,255,.65);padding:11px 20px;border-radius:999px;transition:background .2s,color .2s}
+
+/* ------------------------------- planner -------------------------------- */
+.form{margin-top:18px;padding:16px}
+.field{display:block}
+.field+.field,.row2{margin-top:12px}
+.field label,.row2 label{display:block;font-size:12px;font-weight:600;color:var(--ink-2);margin:0 2px 6px}
+.input{width:100%;font:inherit;font-size:15px;color:var(--ink);background:rgba(255,255,255,.85);
+  border:1px solid var(--sky-2);border-radius:14px;padding:12px 14px;outline:none;-webkit-appearance:none;appearance:none}
+.input:focus{border-color:var(--sky-4);box-shadow:0 0 0 3px rgba(90,169,230,.18)}
+select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 18px) 52%,calc(100% - 13px) 52%;background-size:5px 5px;background-repeat:no-repeat}
+.row2{display:grid;grid-template-columns:1.25fr 1fr;gap:10px}
+.combo{position:relative}
+.opts{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:15;background:#fff;border:1px solid var(--line);
+  border-radius:14px;box-shadow:0 14px 34px -14px rgba(15,42,61,.35);max-height:264px;overflow:auto;padding:4px}
+.opt{display:block;width:100%;text-align:left;padding:10px 12px;border-radius:10px;font-size:14px}
+.opt:hover,.opt.on{background:var(--sky-1)}
+.opt mark{background:none;color:var(--sky-5);font-weight:600}
+.opts .none{padding:12px;font-size:13px;color:var(--muted)}
+.go-btn{margin-top:14px;width:100%;background:var(--ink);color:#fff;font-weight:600;font-size:15px;padding:14px;border-radius:999px}
+.go-btn:disabled{opacity:.5}
+
+.result .top2{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.result .st{font-size:15px;font-weight:600;line-height:1.3}
+.result .when{font-size:13px;color:var(--muted);margin-top:2px}
+.result .big{font-size:44px;font-weight:600;letter-spacing:-.03em;margin-top:14px;line-height:1}
+.result .big small{font-size:14px;font-weight:500;color:var(--ink-2);letter-spacing:0;margin-left:6px}
+.result .rng{font-size:13px;color:var(--muted);margin-top:6px}
+.result .say{font-size:14px;color:var(--ink-2);margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.bars{display:flex;align-items:flex-end;gap:3px;height:120px;padding:0 2px}
+.bars button{flex:1;border-radius:4px 4px 2px 2px;min-height:3px;transition:opacity .2s,height .4s cubic-bezier(.2,.8,.2,1)}
+.bars-x{display:flex;gap:3px;font-size:10.5px;color:var(--faint);margin-top:6px;padding:0 2px}
+.bars-x span{flex:1;text-align:center;white-space:nowrap;overflow:visible;width:0}
+.tab[aria-selected="true"]{background:#fff;color:var(--ink)}
+
+.view{animation:rise .28s ease}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 </style>
+</head>
+<body>
+<div class="shell">
+  <header class="top">
+    <div class="brand">Metro<span>Pulse</span></div>
+    <div class="status" id="status"><i></i><span id="statusTxt">Connecting</span><span class="num" id="clock" style="color:var(--muted)"></span></div>
+  </header>
 
-<header>
-  <div class="mark"></div>
-  <div class="brand"><b>MetroPulse</b><span>Namma Metro · Purple Line</span></div>
-  <div class="clock"><b id="clock">--:--</b><span id="date">--</span></div>
-</header>
+  <!-- ================================ LIVE ================================ -->
+  <section id="view-live" class="view">
+    <div class="hero">
+      <div class="eyebrow" id="stState">Waiting for the station feed</div>
+      <h1 id="boardH">Finding your <em class="s">best coach</em></h1>
+      <p class="lead" id="boardWhy">Coach loads appear when a train is approaching.</p>
 
-<div id="conn"><i></i><span id="connTxt">Connecting…</span></div>
+      <div class="rings" id="rings"></div>
 
-<div id="app" class="hide">
-  <div class="station">
-    <div class="now" id="nowLbl">You are at</div>
-    <h1 id="stnName">—</h1>
-    <div class="next" id="nextWrap">Next stop <b id="stnNext">—</b></div>
-  </div>
-
-  <div class="line" id="line"></div>
-
-  <div id="rec" class="wait">
-    <div class="lbl" id="recLbl">Waiting for the platform</div>
-    <div class="big" id="recBig">—</div>
-    <div class="sub" id="recSub">Live coach loads appear when a service is at the platform.</div>
-    <div class="arrow">›</div>
-  </div>
-
-  <div class="sect">Coach loading <em id="capNote"></em></div>
-  <div id="coaches"></div>
-
-  <div class="sect">Expected crowd</div>
-  <div id="fc">
-    <div class="ico" id="fcIco">•</div>
-    <div class="body">
-      <div class="lvl" id="fcLvl">—</div>
-      <div class="why" id="fcWhy">—</div>
-      <span class="tag" id="fcTag"></span>
+      <div class="glass route">
+        <div class="row"><span>Station <b id="stName">—</b></span><span id="stNextWrap">Next <b id="stNext">—</b></span></div>
+        <div class="stops" id="stops"></div>
+      </div>
     </div>
-  </div>
 
-  <div id="warn" class="hide"></div>
-  <div id="train"><i></i><span id="trainTxt">—</span></div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <button class="tease" id="tease">
+        <span class="k"><small>Crowd at this station</small><b id="teaseT">Loading forecast</b><span id="teaseS"></span></span>
+        <span class="go">Outlook</span>
+      </button>
+      <div class="note hide" id="warn"></div>
 
-  <footer>
-    Coach loading is measured live on the platform and updates as people board.<br />
-    Crowd forecast uses BMRCL ridership patterns and Bangalore event dates.
-  </footer>
+      <div class="sh"><h2>Coaches on this train</h2><span id="capNote"></span></div>
+      <div class="list" id="coachList"></div>
+
+      <div class="sh"><h2>Service</h2></div>
+      <div class="list">
+        <div class="li"><div class="k"><b id="trainTxt">No train yet</b><span id="trainSub">Updates live from the platform</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== FORECAST ============================== -->
+  <section id="view-fc" class="view hide">
+    <div class="hero" style="padding-bottom:22px">
+      <div class="eyebrow" id="fcWhere">Crowd outlook</div>
+      <h1 id="fcH">—</h1>
+      <p class="lead" id="fcLead"></p>
+
+      <div class="gauge-wrap">
+        <div class="gauge">
+          <svg viewBox="0 0 240 240" aria-hidden="true">
+            <defs>
+              <linearGradient id="gGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#5aa9e6"/><stop id="gStop2" offset="1" stop-color="#1fa971"/>
+              </linearGradient>
+            </defs>
+            <circle cx="120" cy="120" r="100" fill="rgba(255,255,255,.45)" stroke="rgba(255,255,255,.8)" stroke-width="1"/>
+            <circle cx="120" cy="120" r="100" fill="none" stroke="rgba(43,127,196,.12)" stroke-width="14" stroke-dasharray="471 157" transform="rotate(135 120 120)" stroke-linecap="round"/>
+            <circle id="gArc" cx="120" cy="120" r="100" fill="none" stroke="url(#gGrad)" stroke-width="14" stroke-dasharray="0 628" transform="rotate(135 120 120)" stroke-linecap="round" style="transition:stroke-dasharray .7s cubic-bezier(.2,.8,.2,1)"/>
+          </svg>
+          <div class="c">
+            <small id="gWhen">This hour</small>
+            <b class="num" id="gNum">—</b>
+            <span>people entering</span>
+            <div class="w" id="gWord">—</div>
+          </div>
+        </div>
+        <div class="chips" id="chips"></div>
+      </div>
+    </div>
+
+    <div class="sheet">
+      <div class="grab"></div>
+      <div class="duo">
+        <div class="stat"><small>Quietest in next 6 h</small><b class="num" id="inQuiet">—</b><span id="inQuietD"></span></div>
+        <div class="stat"><small>Busiest rest of today</small><b class="num" id="inPeak">—</b><span id="inPeakD"></span></div>
+      </div>
+
+      <div class="sh"><h2>Next 18 hours</h2><span>Tap the curve</span></div>
+      <div class="chart">
+        <div class="readout"><b id="roT">—</b><span id="roV"></span></div>
+        <svg id="chart" role="img" aria-label="Hourly crowd forecast"></svg>
+        <div class="key"><span><i></i>Expected</span><span><i class="b"></i>Likely range</span></div>
+      </div>
+
+      <div class="sh"><h2>This week</h2><span>Compared with a normal day</span></div>
+      <div class="list" id="week"></div>
+
+      <div class="sh"><h2>About this forecast</h2></div>
+      <div class="about" id="about">Loading model details…</div>
+      <p class="foot">Calculated on the station server from Bangalore Metro (BMRCL) hourly ridership and city event dates. Times in IST.</p>
+    </div>
+  </section>
+
+  <!-- =============================== PLANNER ============================== -->
+  <section id="view-plan" class="view hide">
+    <div class="hero" style="padding-bottom:22px">
+      <div class="eyebrow">Plan a trip · any Namma Metro station</div>
+      <h1>How busy will it <em class="s">be?</em></h1>
+      <p class="lead">Pick a real station, a date and a time. The prediction comes from Bangalore Metro's own hourly ridership.</p>
+
+      <div class="glass form">
+        <div class="field combo">
+          <label for="plStation">Station</label>
+          <input class="input" id="plStation" type="text" autocomplete="off" spellcheck="false" placeholder="Search 83 stations" role="combobox" aria-expanded="false" aria-controls="plOpts" />
+          <div class="opts hide" id="plOpts" role="listbox"></div>
+        </div>
+        <div class="row2">
+          <div><label for="plDate">Date</label><input class="input" id="plDate" type="date" /></div>
+          <div><label for="plHour">Time</label><select class="input" id="plHour"></select></div>
+        </div>
+        <button class="go-btn" id="plGo">Predict crowd</button>
+      </div>
+    </div>
+
+    <div class="sheet">
+      <div class="grab"></div>
+      <div id="plEmpty" class="about">Choose a station and time to see the predicted crowd.</div>
+      <div id="plOut" class="hide">
+        <div class="stat result">
+          <div class="top2">
+            <div><div class="st" id="plSt">—</div><div class="when" id="plWhen">—</div></div>
+            <span class="pill" id="plLvl"></span>
+          </div>
+          <div class="big num" id="plNum">—</div>
+          <div class="rng num" id="plRng"></div>
+          <div class="say" id="plSay"></div>
+        </div>
+
+        <div class="duo" style="margin-top:10px">
+          <div class="stat"><small>Quietest within 3 h</small><b class="num" id="plQuiet">—</b><span id="plQuietD"></span></div>
+          <div class="stat"><small>Busiest that day</small><b class="num" id="plPeak">—</b><span id="plPeakD"></span></div>
+        </div>
+
+        <div class="sh"><h2>That day, hour by hour</h2><span>Tap a bar</span></div>
+        <div class="chart" style="padding:16px 12px 12px">
+          <div class="bars" id="plBars"></div>
+          <div class="bars-x" id="plBarsX"></div>
+        </div>
+        <p class="foot">Predicted from Bangalore Metro (BMRCL) hourly entries, Aug–Sep 2025, with city holidays and events. Busy and quiet are relative to that station's normal.</p>
+      </div>
+    </div>
+  </section>
 </div>
 
-<div id="empty">
-  <div class="e">📡</div>
-  <p id="emptyMsg">Connecting to the station feed…</p>
-</div>
+<nav class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true" data-view="live">Live</button>
+  <button class="tab" role="tab" aria-selected="false" data-view="fc">Outlook</button>
+  <button class="tab" role="tab" aria-selected="false" data-view="plan">Planner</button>
+</nav>
 
 <script type="module">
-const mqtt = (await import('https://unpkg.com/mqtt@5.10.3/dist/mqtt.esm.js')).default;
+import mqtt from './vendor/mqtt.esm.js';
 
-/* ==========================================================================
-   MetroPulse passenger app
-   --------------------------------------------------------------------------
-   Read-only. It subscribes to what the Twin and the Control Room already
-   publish and renders the passenger's half of the product: which coach to
-   stand at, and what kind of crowd to expect. It never publishes, so nothing
-   a passenger does here can perturb the simulation an operator is running.
-   ========================================================================== */
-
-const MQTT_WS_URL = 'ws://localhost:9001';
+/* The broker runs on the PC that served this page, so a phone on the same
+   Wi-Fi reaches it at the host name it used to open the app. */
+const MQTT_WS_URL = `ws://${location.hostname || 'localhost'}:9001`;
 const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = n => Number(n).toLocaleString('en-IN');
 
-/* Bangalore, so every time shown is IST regardless of the phone's timezone —
-   same reasoning as the Twin and the Control Room, and the same formatter. */
-const IST = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
-  hour: '2-digit', minute: '2-digit', second: '2-digit', weekday: 'short', hourCycle: 'h23'
-});
+/* ------------------------------- time (IST) ------------------------------- */
+const IST = new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Kolkata', year:'numeric', month:'2-digit',
+  day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', weekday:'short', hourCycle:'h23' });
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+function istParts(ms){ const o={}; for (const p of IST.formatToParts(new Date(ms))) o[p.type]=p.value; return o; }
 
-function istParts(ms) {
-  const out = {};
-  for (const p of IST.formatToParts(new Date(ms))) out[p.type] = p.value;
-  return out;
-}
-
-/* The Twin's simulated clock. The operator can jump it to any date, and the
-   crowd forecast has to follow that rather than real time — otherwise setting
-   the Twin to Diwali shows a Tuesday-afternoon forecast. Tracked as an offset
-   so it keeps ticking between messages instead of freezing on the last one. */
+/* The Twin's simulated clock; the forecast follows it. */
 let simOffsetMs = 0;
 const simNow = () => Date.now() + simOffsetMs;
+const hh = h => String(h).padStart(2,'0') + ':00';
+const ampm = h => h === 0 ? '12 am' : h < 12 ? `${h} am` : h === 12 ? '12 pm' : `${h-12} pm`;
+const WORD = { low:'Quiet', med:'Moderate', high:'Busy' };
+const COL = { low:'var(--green)', med:'var(--amber)', high:'var(--coral)' };
 
-/* ------------------------- crowd forecast --------------------------------
-   Three inputs, in priority order:
-
-     1. a significant date — a real Bangalore event or holiday, from the
-        vendored list (see build_dates.py). These override everything: the
-        metro is busy on Diwali whatever the hour.
-     2. rush hour — 08:00-11:00 and 16:00-19:00 IST.
-     3. otherwise, whatever the Control Room's BMRCL-backed baseline says on
-        prediction/baseline, if it has published one.
-
-   1 and 2 are computed here rather than asked for, so the forecast still
-   works with only the Twin running — the app is meant to be usable on its
-   own, and a passenger's phone should not depend on the Control Room being
-   open.                                                                    */
-const RUSH = [
-  { from: 8,  to: 11, label: 'Morning rush hour', short: '08:00–11:00' },
-  { from: 16, to: 19, label: 'Evening rush hour', short: '16:00–19:00' }
-];
-
-let significantDates = {};       // "YYYY-MM-DD" -> "Event name"
-/* The Control Room's BMRCL-backed baseline, and — critically — the moment it
-   was computed FOR. The topic is retained, so without checking that the
-   forecast still describes the moment being asked about, the app happily
-   reports whatever was last published: "Republic Day" at two in the afternoon
-   on an ordinary Tuesday, because that is when the operator last moved the
-   clock. See for_iso in prediction/baseline. */
-let baselineFromPipeline = null; // { level, reason, forKey }
-
-function rushWindow(hour) {
-  return RUSH.find(r => hour >= r.from && hour < r.to) || null;
-}
-
-function forecast() {
+function tickClock(){
   const p = istParts(simNow());
-  const dateKey = `${p.year}-${p.month}-${p.day}`;
-  const hour = +p.hour;
-
-  const event = significantDates[dateKey];
-  if (event) {
-    return { level: 'high', icon: '🎉', headline: 'Expect heavy crowds',
-             why: event, tag: 'Significant date' };
-  }
-
-  const rush = rushWindow(hour);
-  if (rush) {
-    return { level: 'high', icon: '🚦', headline: 'Expect heavy crowds',
-             why: `${rush.label} — services are busiest between ${rush.short}.`,
-             tag: 'Rush hour' };
-  }
-
-  // only when it was computed for this very date and hour — see above
-  if (baselineFromPipeline && baselineFromPipeline.forKey === `${dateKey}T${p.hour}`) {
-    const lv = baselineFromPipeline.level;
-    return {
-      level: lv,
-      icon: lv === 'high' ? '🚦' : lv === 'med' ? '👥' : '🙂',
-      headline: lv === 'high' ? 'Expect heavy crowds'
-              : lv === 'med'  ? 'Moderately busy'
-                              : 'Should be quiet',
-      why: baselineFromPipeline.reason,
-      tag: 'BMRCL ridership data'
-    };
-  }
-
-  return { level: 'low', icon: '🙂', headline: 'Should be quiet',
-           why: 'Outside rush hour, and no major events today.', tag: 'Off-peak' };
+  $('clock').textContent = ` · ${p.hour}:${p.minute}`;
+  maybeRefreshForecast();
 }
 
-const LEVEL_COLOR = { low:'var(--low)', med:'var(--med)', high:'var(--high)' };
-const LEVEL_BG    = { low:'#14291d', med:'#2a2213', high:'#2b1519' };
+/* --------------------------------- tabs ---------------------------------- */
+function show(view){
+  document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.view === view)));
+  $('view-live').classList.toggle('hide', view !== 'live');
+  $('view-fc').classList.toggle('hide', view !== 'fc');
+  $('view-plan').classList.toggle('hide', view !== 'plan');
+  window.scrollTo({ top:0 });
+  if (view === 'fc' && fc) drawChart();
+  if (view === 'plan') initPlanner();
+}
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => show(t.dataset.view)));
+$('tease').addEventListener('click', () => show('fc'));
 
-function renderForecast() {
-  const f = forecast();
-  $('fcIco').textContent = f.icon;
-  $('fcIco').style.background = LEVEL_BG[f.level];
-  $('fcLvl').textContent = f.headline;
-  $('fcLvl').style.color = LEVEL_COLOR[f.level];
-  $('fcWhy').textContent = f.why;
-  $('fcTag').textContent = f.tag;
+/* ================================= LIVE =================================== */
+const STATE_TEXT = { ABSENT:'Next train', ARRIVING:'Train arriving', DOCKED:'Doors open',
+  BOARDING:'Boarding now', CLOSING:'Doors closing', DEPARTING:'Departing', OFF:'No service' };
+const TRAIN_TEXT = { ABSENT:'No train at the platform', ARRIVING:'Train arriving now', DOCKED:'Train at the platform, doors open',
+  BOARDING:'Boarding in progress', CLOSING:'Doors closing, stand clear', DEPARTING:'Train departing', OFF:'No service running' };
+const coachLabel = n => n.replace(/^COACH\s*/i, 'Coach ');
+const joinNames = a => a.length <= 1 ? (a[0]||'') : a.slice(0,-1).join(', ') + ' or ' + a[a.length-1];
+
+let lastState = null, currentStation = null;
+
+function ringSvg(pct, col){
+  const C = 2 * Math.PI * 32, on = C * Math.min(1, pct / 100);
+  return `<svg viewBox="0 0 76 76"><circle cx="38" cy="38" r="32" fill="none" stroke="rgba(43,127,196,.14)" stroke-width="7"/>
+    <circle cx="38" cy="38" r="32" fill="none" stroke="${col}" stroke-width="7" stroke-linecap="round"
+      stroke-dasharray="${on} ${C}" transform="rotate(-90 38 38)"/>
+    <text x="38" y="43" text-anchor="middle" font-size="16" font-weight="700" fill="#0f2a3d" font-family="Inter,sans-serif">${pct}%</text></svg>`;
 }
 
-/* ------------------------------ clock ------------------------------------ */
-function tickClock() {
-  const p = istParts(simNow());
-  $('clock').textContent = `${p.hour}:${p.minute}`;
-  $('date').textContent = `${p.weekday} ${+p.day} ${MONTHS[+p.month - 1]} · IST`;
-  renderForecast();   // the forecast is a function of the clock, so it follows it
-}
-setInterval(tickClock, 1000);
-tickClock();
-
-/* --------------------------- station + coaches ---------------------------- */
-const STATUS_TEXT = { low:'Space', med:'Filling', high:'Full' };
-
-function renderLine(st) {
-  const el = $('line');
-  if (el.childElementCount !== st.count) {
-    el.innerHTML = Array.from({ length: st.count }, () => '<div class="stop"></div>').join('');
-  }
-  [...el.children].forEach((d, i) => {
-    d.className = 'stop' + (i < st.index ? ' done' : '') + (i === st.index ? ' done here' : '');
-  });
-}
-
-function renderCoaches(s) {
-  const cap = s.compartment_capacity;
-  const wrap = $('coaches');
-  if (wrap.childElementCount !== s.coaches.length) {
-    wrap.innerHTML = s.coaches.map((_, i) => `
-      <div class="coach" id="co${i}">
-        <div class="badge hide" id="cbadge${i}">Board here</div>
-        <div class="top">
-          <span class="nm"><span id="cname${i}"></span><u id="czone${i}"></u></span>
-          <span class="pill" id="cpill${i}"></span>
-          <span class="cnt"><b id="cload${i}">0</b>/<span id="ccap${i}"></span></span>
-        </div>
-        <div class="bar"><i id="cbar${i}"></i><i class="q" id="cq${i}"></i></div>
-        <div class="foot"><span id="cfoot${i}"></span><span id="cpct${i}"></span></div>
-      </div>`).join('');
-  }
-
-  s.coaches.forEach((c, i) => {
-    const col = LEVEL_COLOR[c.status] || 'var(--low)';
-    const pctOn = Math.min(100, Math.round(c.onboard / cap * 100));
-    const pctQ  = Math.min(100 - pctOn, Math.round(c.queue / cap * 100));
-
-    $('cname' + i).textContent = c.name.replace(/^COACH/i, 'Coach');
-    $('czone' + i).textContent = 'Zone ' + c.id;
-    $('cload' + i).textContent = c.load;
-    $('ccap' + i).textContent = cap;
-    $('cbar' + i).style.width = pctOn + '%';
-    $('cbar' + i).style.background = col;
-    $('cq' + i).style.width = pctQ + '%';
-    $('cq' + i).style.background = col;
-    $('cfoot' + i).textContent = `${c.onboard} on board · ${c.queue} waiting here`;
-    $('cpct' + i).textContent = Math.round(c.load / cap * 100) + '% full';
-
-    const pill = $('cpill' + i);
-    pill.textContent = STATUS_TEXT[c.status] || '—';
-    pill.style.color = col;
-    pill.style.background = LEVEL_BG[c.status] || '#1d2434';
-
-    $('co' + i).classList.toggle('best', !!c.recommended);
-    $('cbadge' + i).classList.toggle('hide', !c.recommended);
-  });
-}
-
-/* What the station name on screen actually means right now.
-
-   `station` in twin/state is the stop the SERVICE is at, and that index moves
-   the instant the train pulls out — so between one platform and the next the
-   app was announcing "You are at University Road" while the train was still
-   somewhere in the tunnel, several seconds before it arrived. The name was
-   never wrong; the words in front of it were. */
-const NOW_LABEL = {
-  ABSENT:    'Next service at',
-  ARRIVING:  'Service arriving at',
-  DEPARTING: 'Departing',
-  CLOSING:   'Departing'
-};
-
-/* "COACH 1" -> "Coach 1" */
-const coachLabel = name => name.replace(/^COACH\s*/i, 'Coach ');
-
-/* "Coach 1", "Coach 1 or Coach 3", "Coach 1, Coach 2 or Coach 3" */
-function joinCoaches(names) {
-  if (names.length <= 1) return names[0] || '';
-  return names.slice(0, -1).join(', ') + ' or ' + names[names.length - 1];
-}
-
-/* The whole point of the product, in one sentence a passenger can act on. */
-function renderRecommendation(s) {
-  const rec = $('rec');
-  const atPlatform = s.train_state === 'DOCKED' || s.train_state === 'BOARDING';
+function render(s){
+  lastState = s;
+  checkPublishers(s);
+  const cap = s.compartment_capacity || 1;
   const best = s.coaches[s.best_coach];
+  const atPlatform = s.train_state === 'DOCKED' || s.train_state === 'BOARDING';
+  const idx = (s.best_coaches && s.best_coaches.length) ? s.best_coaches : (best ? [s.best_coach] : []);
+  const bestSet = new Set(s.station.terminus ? [] : idx);
 
-  if (!best || s.station.terminus) {
-    rec.classList.add('wait');
-    $('recLbl').textContent = s.station.terminus ? 'End of the line' : 'Waiting for the platform';
-    $('recBig').textContent = s.station.terminus ? 'Last stop' : '—';
-    $('recSub').textContent = s.station.terminus
-      ? 'This service terminates here. Please alight.'
-      : 'Live coach loads appear when a service is at the platform.';
-    return;
+  $('stState').textContent = `${STATE_TEXT[s.train_state] || 'Station'} · ${s.station.name}`;
+  $('stName').textContent = s.station.name;
+  $('stNextWrap').classList.toggle('hide', !s.next_station);
+  if (s.next_station) $('stNext').textContent = s.next_station;
+
+  let html = '';
+  for (let k = 0; k < s.station.count; k++){
+    if (k) html += `<div class="seg${k <= s.station.index ? ' done' : ''}"></div>`;
+    html += `<div class="s${k < s.station.index ? ' done' : ''}${k === s.station.index ? ' here' : ''}"></div>`;
+  }
+  $('stops').innerHTML = html;
+
+  // headline
+  if (!best || s.station.terminus){
+    $('boardH').innerHTML = s.station.terminus ? `End of the <em class="s">line</em>` : `Finding your <em class="s">best coach</em>`;
+    $('boardWhy').textContent = s.station.terminus ? 'This train terminates here. Please alight.' : 'Coach loads appear when a train is approaching.';
+  } else {
+    const allTied = idx.length >= s.coaches.length;
+    const names = allTied ? 'any coach' : joinNames(idx.map(i => coachLabel(s.coaches[i].name)));
+    $('boardH').innerHTML = `${atPlatform ? 'Board' : 'Stand for'} <em class="s">${esc(names)}</em>`;
+    const busiest = Math.max(...s.coaches.map(c => c.load)), saving = busiest - best.load;
+    $('boardWhy').textContent = allTied
+      ? `Every coach has ${best.load} of ${cap} on board. Use the nearest door.`
+      : saving > 0
+        ? `${best.load} of ${cap} on board${idx.length > 1 ? ' in each' : ''}, ${saving} fewer ${saving === 1 ? 'person' : 'people'} than the busiest coach.`
+        : `${best.load} of ${cap} on board. The emptiest coach on this train.`;
   }
 
-  rec.classList.remove('wait');
-  $('recLbl').textContent = atPlatform ? 'Board here' : 'When the train arrives, board';
+  // coach rings + list
+  $('rings').innerHTML = s.coaches.map((c, i) => {
+    const pct = Math.min(100, Math.round(c.load / cap * 100));
+    const isBest = bestSet.has(i);
+    return `<div class="glass ring${isBest ? ' best' : ''}">${isBest ? '<span class="tag">Best</span>' : ''}
+      ${ringSvg(pct, isBest ? 'var(--green)' : COL[c.status] || 'var(--sky-4)')}
+      <div class="nm">${esc(coachLabel(c.name))}</div><div class="sub num">${c.load} of ${cap}</div></div>`;
+  }).join('');
+  $('capNote').textContent = `${cap} per coach`;
+  $('coachList').innerHTML = s.coaches.map(c => {
+    const pct = Math.min(100, Math.round(c.load / cap * 100));
+    return `<div class="li"><div class="k"><b>${esc(coachLabel(c.name))}</b><span>${c.onboard} on board · ${c.queue} waiting at this door</span></div>
+      <span class="meter"><i style="width:${pct}%;background:${COL[c.status] || 'var(--sky-4)'}"></i></span>
+      <span class="pill ${c.status || 'low'}">${c.status === 'high' ? 'Full' : c.status === 'med' ? 'Filling' : 'Space'}</span></div>`;
+  }).join('');
 
-  // Every coach tied at the lightest load, not just one of them — see
-  // best_coaches in twin/state. Naming a single coach out of a tie sends the
-  // whole platform to it and creates the imbalance this is meant to prevent.
-  const idx = (s.best_coaches && s.best_coaches.length) ? s.best_coaches : [s.best_coach];
-  const cap = s.compartment_capacity;
-  const allTied = idx.length >= s.coaches.length;
+  $('trainTxt').textContent = TRAIN_TEXT[s.train_state] || s.train_state;
+  $('trainSub').textContent = s.next_station ? `Next stop ${s.next_station}` : 'Final stop on this line';
 
-  $('recBig').textContent = allTied
-    ? 'Any coach'
-    : joinCoaches(idx.map(i => coachLabel(s.coaches[i].name)));
-
-  const busiest = Math.max(...s.coaches.map(c => c.load));
-  const saving = busiest - best.load;
-  $('recSub').textContent = allTied
-    ? `Every coach is carrying ${best.load} of ${cap} — the train is evenly loaded, so take whichever is nearest.`
-    : idx.length > 1
-      ? `${best.load} of ${cap} on board in each — ${saving} fewer than the busiest coach. Either is equally good.`
-      : saving > 0
-        ? `${best.load} of ${cap} on board — ${saving} fewer ${saving === 1 ? 'person' : 'people'} than the busiest coach.`
-        : `${best.load} of ${cap} on board — the emptiest coach on this service.`;
+  if (s.station.name !== currentStation){ currentStation = s.station.name; loadForecast(true); }
 }
 
-const TRAIN_TEXT = {
-  ABSENT:   'No service at the platform',
-  ARRIVING: 'Service arriving now',
-  DOCKED:   'Service at the platform — doors open',
-  BOARDING: 'Boarding in progress',
-  CLOSING:  'Doors closing — stand clear',
-  DEPARTING:'Service departing',
-  OFF:      'No service running'
-};
-
-function renderTrain(s) {
-  const txt = TRAIN_TEXT[s.train_state] || s.train_state;
-  $('trainTxt').innerHTML = `<b>${txt}</b>`;
-}
-
-let lastState = null;
-/* twin/state is one retained topic, so a second Twin tab publishes over the
-   first and the station appears to jump between two different runs. Rather
-   than render the flip-flop as if it were the truth, watch the publisher id:
-   alternating ids inside a few seconds means more than one Twin is open. */
-let seenPublishers = new Map();   // id -> last seen ms
-
-function checkPublishers(s) {
+const seenPublishers = new Map();
+function checkPublishers(s){
   const warn = $('warn');
-  if (!s.publisher) { warn.classList.add('hide'); return; }
-
+  if (!s.publisher){ warn.classList.add('hide'); return; }
   const now = Date.now();
   seenPublishers.set(s.publisher, now);
   for (const [id, at] of seenPublishers) if (now - at > 15000) seenPublishers.delete(id);
-
-  if (seenPublishers.size > 1) {
-    warn.classList.remove('hide');
-    warn.innerHTML = `<b>${seenPublishers.size} Digital Twins are publishing.</b> `
-      + `This station feed is switching between them, so the station and coach `
-      + `loads below may jump. Close all but one Twin tab.`;
-  } else {
-    warn.classList.add('hide');
-  }
-}
-
-function render(s) {
-  checkPublishers(s);
-  lastState = s;
-  $('app').classList.remove('hide');
-  $('empty').classList.add('hide');
-
-  $('nowLbl').textContent = NOW_LABEL[s.train_state] || 'You are at';
-  $('stnName').textContent = s.station.name;
-  $('nextWrap').classList.toggle('hide', !s.next_station);
-  if (s.next_station) $('stnNext').textContent = s.next_station;
-  $('capNote').textContent = `${s.compartment_capacity} seats per coach`;
-
-  renderLine(s.station);
-  renderCoaches(s);
-  renderRecommendation(s);
-  renderTrain(s);
+  warn.classList.toggle('hide', seenPublishers.size <= 1);
+  warn.textContent = 'Station feed is unstable: more than one Digital Twin is publishing, so details may jump.';
 }
 
 /* --------------------------------- MQTT ---------------------------------- */
-function setConn(state, text) {
-  const el = $('conn');
-  el.className = state;
-  $('connTxt').textContent = text;
-}
-
+function setConn(state, text){ $('status').className = 'status ' + state; $('statusTxt').textContent = text; }
 let client = null;
-
-function connect() {
-  setConn('', 'Connecting…');
-  client = mqtt.connect(MQTT_WS_URL, { reconnectPeriod: 3000 });
-
+function connect(){
+  client = mqtt.connect(MQTT_WS_URL, { reconnectPeriod: 3000, connectTimeout: 5000 });
   client.on('connect', () => {
-    setConn('ok', 'Live station feed');
-    // Wildcards on station_id: this build follows whichever station the Twin
-    // is publishing, which is what makes it work unchanged when the line grows
-    // past one simulated platform.
-    client.subscribe('metropulse/+/twin/state', { qos: 1 });
-    client.subscribe('metropulse/+/prediction/baseline', { qos: 1 });
-    client.subscribe('metropulse/+/control/time', { qos: 1 });
+    setConn('ok', 'Live');
+    client.subscribe('metropulse/+/twin/state', { qos:1 });
+    client.subscribe('metropulse/+/control/time', { qos:1 });
   });
-
-  client.on('reconnect', () => setConn('', 'Reconnecting…'));
-  client.on('close', () => setConn('bad', 'Feed unavailable'));
-  client.on('error', () => setConn('bad', 'Feed unavailable'));
-
+  client.on('reconnect', () => setConn('', 'Reconnecting'));
+  client.on('close', () => setConn('bad', 'Offline'));
+  client.on('error', () => setConn('bad', 'Offline'));
   client.on('message', (topic, buf) => {
-    let msg;
-    try { msg = JSON.parse(buf.toString()); } catch { return; }
-
-    if (topic.endsWith('/twin/state')) {
-      // the Twin's simulated clock rides along with its state, so the forecast
-      // tracks an operator jumping the date without a separate round trip
-      if (msg.sim_iso) {
-        const t = Date.parse(msg.sim_iso + '+05:30');
-        if (!isNaN(t)) simOffsetMs = t - Date.now();
-      }
-      render(msg);
-      tickClock();
-      return;
-    }
-
-    if (topic.endsWith('/prediction/baseline')) {
-      // v1 carried no for_iso; treat those as unusable rather than as a
-      // forecast for right now, which is the bug this key exists to stop
-      const forKey = msg.for_iso
-        ? `${String(msg.for_iso).slice(0, 10)}T${String(msg.for_iso).slice(11, 13)}`
-        : null;
-      baselineFromPipeline = forKey
-        ? { level: msg.expected_level, reason: msg.reason || '', forKey }
-        : null;
-      renderForecast();
-      return;
-    }
-
-    if (topic.endsWith('/control/time')) {
+    let msg; try { msg = JSON.parse(buf.toString()); } catch { return; }
+    if (topic.endsWith('/twin/state')){
+      if (msg.sim_iso){ const t = Date.parse(msg.sim_iso + '+05:30'); if (!isNaN(t)) simOffsetMs = t - Date.now(); }
+      render(msg); tickClock();
+    } else if (topic.endsWith('/control/time')){
       const t = Date.parse(String(msg.target_iso) + '+05:30');
-      if (!isNaN(t)) { simOffsetMs = t - Date.now(); tickClock(); }
-      return;
+      if (!isNaN(t)){ simOffsetMs = t - Date.now(); tickClock(); }
     }
   });
 }
-
-/* Nothing renders until the Twin says something, so say what is missing
-   rather than showing an empty station that looks like a bug. */
 setTimeout(() => {
-  if (!lastState) {
-    $('emptyMsg').innerHTML = client && client.connected
-      ? 'Connected, but no service data yet.<br />Start a run in the Digital Twin.'
-      : 'Cannot reach the station feed.<br />Check the MQTT broker is running on <code>localhost:9001</code>.';
-  }
+  if (lastState) return;
+  const up = client && client.connected;
+  $('stState').textContent = up ? 'Connected · no train running yet' : 'Cannot reach the station feed';
+  $('boardWhy').textContent = up ? 'Start a run in the Digital Twin to see live coach loads.'
+                                 : `Make sure the station PC is on and you are on the same Wi-Fi.`;
 }, 6000);
 
-// the date list ships with the app — see build_dates.py
-try {
-  const res = await fetch('data/significant_dates.json');
-  significantDates = (await res.json()).events || {};
-} catch (e) {
-  console.warn('[metropulse] significant dates unavailable', e);
+/* =============================== FORECAST ================================= */
+const HOURS = 36;                       // 18 on the chart, the rest for "tomorrow 9 am"
+let fc = null, fcKey = null, fcLoading = false, sel = 0;
+
+function simHourIso(){ const p = istParts(simNow()); return `${p.year}-${p.month}-${p.day}T${p.hour}:00`; }
+function maybeRefreshForecast(){ if (!fcKey || simHourIso() !== fcKey.at) loadForecast(); }
+
+async function loadForecast(force){
+  const at = simHourIso(), station = currentStation || 'Central City';
+  if (!force && fcKey && fcKey.at === at && fcKey.station === station) return;
+  if (fcLoading) return;
+  fcLoading = true; fcKey = { at, station };
+  try {
+    const r = await fetch(`api/forecast?station=${encodeURIComponent(station)}&at=${at}&hours=${HOURS}`);
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.detail || body.error || r.status);
+    fc = body; sel = 0; renderForecast();
+  } catch (e){
+    console.warn('[forecast]', e);
+    $('teaseT').textContent = 'Forecast unavailable';
+    $('teaseS').textContent = 'The forecast service on the station PC is not responding.';
+    $('fcH').textContent = 'Forecast unavailable';
+    fcKey = null;
+  } finally { fcLoading = false; }
 }
-renderForecast();
+
+const pctDiff = (a, b) => b ? Math.round((a - b) / b * 100) : 0;
+function dayName(iso){ return DAYS[new Date(iso.slice(0,10) + 'T12:00').getDay()]; }
+
+function chipList(){
+  const out = [{ i:0, t:'Now' }, { i:1, t:'In 1 hr' }, { i:3, t:'In 3 hrs' }];
+  const t9 = fc.hours.findIndex((r, i) => i > 0 && r.hour === 9 && r.time.slice(0,10) !== fc.hours[0].time.slice(0,10));
+  if (t9 > 0) out.push({ i:t9, t:'Tomorrow 9 am' });
+  return out;
+}
+
+function renderGauge(){
+  const r = fc.hours[sel];
+  const scale = Math.max(...fc.week.map(d => d.peak), ...fc.hours.map(h => h.expected), 1);
+  const frac = Math.min(1, r.expected / scale);
+  $('gArc').setAttribute('stroke-dasharray', `${(471 * frac).toFixed(1)} 628`);
+  $('gNum').textContent = fmt(r.expected);
+  $('gWhen').textContent = sel === 0 ? 'This hour' : `${r.time.slice(0,10) === fc.hours[0].time.slice(0,10) ? 'Today' : 'Tomorrow'} at ${ampm(r.hour)}`;
+  $('gWord').textContent = WORD[r.level];
+  $('gWord').style.color = COL[r.level];
+  // ring runs from sky blue into the level's own colour, so a busy hour
+  // never reads as calm green
+  $('gStop2').setAttribute('stop-color', LEVEL_HEX[r.level]);
+  document.querySelectorAll('#chips .chip').forEach(c => c.setAttribute('aria-pressed', String(+c.dataset.i === sel)));
+
+  // headline and the line under it describe the SELECTED hour, same as the
+  // gauge, rather than always "now"
+  const today = r.time.slice(0,10) === fc.hours[0].time.slice(0,10);
+  const when = sel === 0 ? '' : ` ${today ? 'at' : 'tomorrow at'} ${ampm(r.hour)}`;
+  $('fcH').innerHTML = {
+    low:  `Should be <em class="s">quiet</em>`,
+    med:  `Moderately <em class="s">busy</em>`,
+    high: `Expect it <em class="s">busy</em>`
+  }[r.level] + (when ? `<span style="font-size:.55em;font-weight:500;color:var(--ink-2);display:block;margin-top:6px">${when.trim()}</span>` : '');
+  const event = today ? fc.event_today : fc.event_tomorrow;
+  $('fcLead').textContent = event
+    ? `${today ? 'Today' : 'Tomorrow'} is ${event}. The forecast accounts for how holidays change travel.`
+    : `Based on how this station is usually used on a ${dayName(r.time)} at ${ampm(r.hour)}.`;
+}
+const LEVEL_HEX = { low:'#1fa971', med:'#d98a1c', high:'#d9534f' };
+
+function renderForecast(){
+  const f = fc, now = f.now;
+  document.body.className = 'lv-' + now.level;
+
+  $('fcWhere').textContent = `${f.station} · ${dayName(f.at)}`;
+
+  $('chips').innerHTML = chipList().map(c => `<button class="chip" data-i="${c.i}">${c.t}</button>`).join('');
+  renderGauge();
+
+  const q = f.quietest_soon, qd = pctDiff(q.expected, now.expected);
+  $('inQuiet').textContent = q.hour === now.hour ? 'Now' : hh(q.hour);
+  $('inQuietD').textContent = q.hour === now.hour ? 'No quieter time soon' : `${Math.abs(qd)}% fewer people`;
+  if (f.peak_today){ $('inPeak').textContent = hh(f.peak_today.hour); $('inPeakD').textContent = `~${fmt(f.peak_today.expected)} entering`; }
+  else { $('inPeak').textContent = '—'; $('inPeakD').textContent = 'Service has ended'; }
+
+  $('teaseT').textContent = `${WORD[now.level]} right now`;
+  $('teaseS').textContent = q.hour !== now.hour && qd <= -10 ? `Quieter at ${ampm(q.hour)}, ${Math.abs(qd)}% fewer people`
+    : f.peak_today && f.peak_today.hour > now.hour ? `Busiest today around ${ampm(f.peak_today.hour)}` : `About ${fmt(now.expected)} people entering this hour`;
+
+  $('week').innerHTML = f.week.map((d, i) => {
+    const dt = new Date(d.date + 'T12:00');
+    const name = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : DAYS[dt.getDay()];
+    const sub = `${dt.getDate()} ${MONTHS[dt.getMonth()]}${d.event ? ' · ' + d.event : ''}`;
+    return `<div class="li"><div class="k"><b>${name}</b><span>${esc(sub)}</span></div>
+      <div class="v">Peak <b class="num">${hh(d.peak_hour)}</b></div><span class="pill ${d.level}">${WORD[d.level]}</span></div>`;
+  }).join('');
+
+  const m = f.model || {}, h = m.history || {};
+  const pc = x => x == null ? '—' : Math.round(x * 100) + '%';
+  $('about').innerHTML = `A <b>gradient-boosted model</b> trained on <b>${h.days || '—'} days</b> of real Bangalore Metro hourly ridership
+    across <b>${h.stations || '—'} stations</b>, including city holidays and events. ${esc(f.station)} follows the pattern of
+    <b>${esc(f.profile_station)}</b>.<br/><br/>
+    On days it had never seen, its typical error was <b>${pc(m.accuracy_wape)}</b>, which is
+    <b>${m.improvement_vs_baseline == null ? '—' : Math.round(m.improvement_vs_baseline * 100) + '%'} more accurate</b> than a simple hourly average.
+    The real crowd fell inside the likely range <b>${pc(m.range_coverage)}</b> of the time.`;
+
+  drawChart();
+}
+
+$('chips').addEventListener('click', e => {
+  const c = e.target.closest('.chip'); if (!c || !fc) return;
+  sel = +c.dataset.i; renderGauge(); drawChart();
+});
+
+/* ------------------------------- area chart ------------------------------- */
+function smooth(pts){
+  if (pts.length < 2) return '';
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 1; i++){
+    const p0 = pts[i-1] || pts[i], p1 = pts[i], p2 = pts[i+1], p3 = pts[i+2] || p2;
+    const c1 = [p1[0] + (p2[0]-p0[0])/6, p1[1] + (p2[1]-p0[1])/6];
+    const c2 = [p2[0] - (p3[0]-p1[0])/6, p2[1] - (p3[1]-p1[1])/6];
+    d += ` C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
+function drawChart(){
+  if (!fc) return;
+  const svg = $('chart');
+  const W = svg.clientWidth || 360, H = 176, padB = 24, padT = 10, padX = 6;
+  const rows = fc.hours.slice(0, 18), n = rows.length;
+  const max = Math.max(...rows.map(r => r.high), 1) * 1.08;
+  const x = i => padX + (W - 2*padX) * i / (n - 1);
+  const y = v => padT + (H - padT - padB) * (1 - v / max);
+  const mid = rows.map((r, i) => [x(i), y(r.expected)]);
+  const hi = rows.map((r, i) => [x(i), y(r.high)]);
+  const lo = rows.map((r, i) => [x(i), y(r.low)]).reverse();
+  const base = H - padB;
+
+  let g = `<defs><linearGradient id="aGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1fa971" stop-opacity=".32"/><stop offset="1" stop-color="#1fa971" stop-opacity="0"/></linearGradient></defs>`;
+  for (const t of [.33, .66]) g += `<line x1="${padX}" x2="${W-padX}" y1="${padT + (base-padT)*t}" y2="${padT + (base-padT)*t}" stroke="#e7eef4" stroke-dasharray="2 5"/>`;
+  g += `<path d="${smooth(hi)} L${lo[0][0]},${lo[0][1]} ${smooth(lo).slice(1)} Z" fill="#cfe7fb" opacity=".75"/>`;
+  g += `<path d="${smooth(mid)} L${x(n-1)},${base} L${x(0)},${base} Z" fill="url(#aGrad)"/>`;
+  g += `<path d="${smooth(mid)}" fill="none" stroke="#1fa971" stroke-width="2.5" stroke-linecap="round"/>`;
+  g += `<line x1="${padX}" x2="${W-padX}" y1="${base}" y2="${base}" stroke="#e7eef4"/>`;
+  rows.forEach((r, i) => {
+    if (i === 0 || (r.hour % 3 === 0 && i >= 2))
+      g += `<text x="${Math.min(W-14, Math.max(14, x(i)))}" y="${H-6}" text-anchor="middle" font-size="10.5" fill="${i === sel ? '#0f2a3d' : '#9db1c1'}" font-weight="${i === sel ? 600 : 400}" font-family="Inter,sans-serif">${i === 0 ? 'Now' : hh(r.hour)}</text>`;
+  });
+  if (sel < n){
+    const [sx, sy] = mid[sel];
+    g += `<line x1="${sx}" x2="${sx}" y1="${padT}" y2="${base}" stroke="#0f2a3d" stroke-opacity=".18"/>`;
+    g += `<circle cx="${sx}" cy="${sy}" r="6" fill="#fff" stroke="#1fa971" stroke-width="3"/>`;
+  }
+  for (let i = 0; i < n; i++) g += `<rect x="${x(i) - (W/n)/2}" y="0" width="${W/n}" height="${H}" fill="transparent" data-i="${i}"/>`;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = g;
+
+  const r = fc.hours[sel];
+  const day = r.time.slice(0,10) === fc.hours[0].time.slice(0,10) ? 'Today' : 'Tomorrow';
+  $('roT').textContent = sel === 0 ? `Now · ${hh(r.hour)}` : `${day} · ${hh(r.hour)}`;
+  $('roV').innerHTML = `<b style="color:${COL[r.level]};font-size:13px">${WORD[r.level]}</b> · ~${fmt(r.expected)} <span style="color:var(--faint)">(${fmt(r.low)}–${fmt(r.high)})</span>`;
+}
+function pick(e){
+  const t = e.target.closest('[data-i]'); if (!t || !fc) return;
+  sel = +t.dataset.i; renderGauge(); drawChart();
+}
+$('chart').addEventListener('click', pick);
+$('chart').addEventListener('pointermove', e => { if (e.pointerType === 'mouse' || e.buttons) pick(e); });
+window.addEventListener('resize', drawChart);
+
+/* ================================ PLANNER ================================= *
+   Any real station, any date and hour. Uses real IST time for its defaults
+   (a passenger planning a real trip), not the Twin's simulated clock.      */
+let stations = null, plStation = null, plData = null, plInit = false;
+const PL_KEY = 'mp.planner';
+const SHORT = s => s.replace(/^.*Station,\s*/, '').replace(/^Sir M\. Visvesvaraya Stn\., /, '');
+
+function plSave(){ try { localStorage.setItem(PL_KEY, JSON.stringify({ s: plStation })); } catch {} }
+function plLoad(){ try { return JSON.parse(localStorage.getItem(PL_KEY) || '{}'); } catch { return {}; } }
+
+async function initPlanner(){
+  if (plInit) return;
+  plInit = true;
+  // hours the metro runs; prediction is per hour
+  $('plHour').innerHTML = Array.from({ length: 19 }, (_, i) => i + 5)
+    .map(h => `<option value="${h}">${ampm(h)}</option>`).join('');
+  const p = istParts(Date.now());                       // real time, not simulated
+  const nextH = Math.min(23, Math.max(5, +p.hour + (+p.minute >= 30 ? 1 : 0)));
+  $('plDate').value = `${p.year}-${p.month}-${p.day}`;
+  $('plHour').value = String(nextH);
+  try {
+    const r = await fetch('api/stations');
+    stations = (await r.json()).stations || [];
+  } catch { stations = []; }
+  const saved = plLoad().s;
+  plStation = stations.includes(saved) ? saved
+            : stations.find(s => /Majestic/.test(s)) || stations[0] || null;
+  $('plStation').value = plStation || '';
+  if (plStation) runPlan();
+}
+
+/* station search: type any part of the name */
+function renderOpts(){
+  const q = $('plStation').value.trim().toLowerCase();
+  const list = (stations || []).filter(s => !q || s.toLowerCase().includes(q)).slice(0, 40);
+  const box = $('plOpts');
+  box.innerHTML = list.length
+    ? list.map((s, i) => {
+        const at = q ? s.toLowerCase().indexOf(q) : -1;
+        const label = at < 0 ? esc(s) : esc(s.slice(0, at)) + '<mark>' + esc(s.slice(at, at + q.length)) + '</mark>' + esc(s.slice(at + q.length));
+        return `<button class="opt${i === 0 ? ' on' : ''}" role="option" data-s="${esc(s)}">${label}</button>`;
+      }).join('')
+    : `<div class="none">No station matches “${esc(q)}”.</div>`;
+  box.classList.remove('hide');
+  $('plStation').setAttribute('aria-expanded', 'true');
+}
+function closeOpts(){ $('plOpts').classList.add('hide'); $('plStation').setAttribute('aria-expanded', 'false'); }
+function pickStation(s){ plStation = s; $('plStation').value = s; closeOpts(); plSave(); runPlan(); }
+
+$('plStation').addEventListener('focus', () => { $('plStation').select(); renderOpts(); });
+$('plStation').addEventListener('input', renderOpts);
+$('plStation').addEventListener('keydown', e => {
+  if (e.key === 'Enter'){ const first = $('plOpts').querySelector('.opt'); if (first) pickStation(first.dataset.s); e.preventDefault(); }
+  if (e.key === 'Escape'){ closeOpts(); $('plStation').value = plStation || ''; }
+});
+$('plOpts').addEventListener('mousedown', e => e.preventDefault());   // keep focus while choosing
+$('plOpts').addEventListener('click', e => { const o = e.target.closest('.opt'); if (o) pickStation(o.dataset.s); });
+$('plStation').addEventListener('blur', () => setTimeout(() => { closeOpts(); $('plStation').value = plStation || ''; }, 120));
+$('plGo').addEventListener('click', runPlan);
+$('plDate').addEventListener('change', runPlan);
+$('plHour').addEventListener('change', runPlan);
+
+async function runPlan(){
+  if (!plStation || !$('plDate').value) return;
+  const at = `${$('plDate').value}T${String($('plHour').value).padStart(2,'0')}:00`;
+  $('plGo').disabled = true; $('plGo').textContent = 'Predicting…';
+  try {
+    const r = await fetch(`api/plan?station=${encodeURIComponent(plStation)}&at=${at}`);
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || r.status);
+    plData = body; renderPlan(+$('plHour').value);
+  } catch (e){
+    $('plOut').classList.add('hide'); $('plEmpty').classList.remove('hide');
+    $('plEmpty').textContent = 'Prediction unavailable. The forecast service on the station PC is not responding.';
+  } finally { $('plGo').disabled = false; $('plGo').textContent = 'Predict crowd'; }
+}
+
+function renderPlan(hour){
+  const d = plData, r = d.day[hour];
+  $('plEmpty').classList.add('hide'); $('plOut').classList.remove('hide');
+  const dt = new Date(d.date + 'T12:00');
+  $('plSt').textContent = d.station;
+  $('plWhen').textContent = `${DAYS[dt.getDay()]} ${dt.getDate()} ${MONTHS[dt.getMonth()]} · ${ampm(hour)}`;
+  const lv = $('plLvl'); lv.className = 'pill ' + r.level; lv.textContent = r.service ? WORD[r.level] : 'No trains';
+
+  if (!r.service){
+    $('plNum').innerHTML = `—<small>no service</small>`;
+    $('plRng').textContent = '';
+    $('plSay').textContent = 'The metro is not running at this hour.';
+  } else {
+    $('plNum').innerHTML = `${fmt(r.expected)}<small>people entering</small>`;
+    $('plRng').textContent = `Likely ${fmt(r.low)}–${fmt(r.high)} in that hour`;
+    const service = d.day.filter(x => x.service);
+    const avg = service.reduce((a, x) => a + x.expected, 0) / service.length;
+    const diff = avg ? Math.round((r.expected - avg) / avg * 100) : 0;
+    const rel = Math.abs(diff) < 8 ? 'about as busy as an average hour there that day'
+      : diff >= 100 ? `${(r.expected / avg).toFixed(1)}× an average hour there that day`
+      : diff > 0 ? `${diff}% busier than an average hour there that day`
+      : `${Math.abs(diff)}% quieter than an average hour there that day`;
+    const ev = d.event ? ` ${d.event} is factored in.`
+      : d.event_tomorrow ? ` The day before ${d.event_tomorrow} is factored in.`
+      : d.event_yesterday ? ` The day after ${d.event_yesterday} is factored in.` : '';
+    $('plSay').textContent = `${WORD[r.level]} for ${SHORT(d.station)}: ${rel}.${ev}`;
+  }
+
+  // quietest within 3 h of the chosen hour, and the day's busiest
+  const near = d.day.filter(x => x.service && Math.abs(x.hour - hour) <= 3);
+  const q = near.length ? near.reduce((a, x) => x.expected < a.expected ? x : a) : null;
+  if (q && r.service){
+    const qd = r.expected ? Math.round((r.expected - q.expected) / r.expected * 100) : 0;
+    $('plQuiet').textContent = q.hour === hour ? 'This hour' : ampm(q.hour);
+    $('plQuietD').textContent = q.hour === hour ? 'Already the quietest nearby' : `${qd}% fewer people`;
+  } else { $('plQuiet').textContent = '—'; $('plQuietD').textContent = ''; }
+  const pk = d.day.filter(x => x.service).reduce((a, x) => x.expected > a.expected ? x : a);
+  $('plPeak').textContent = ampm(pk.hour);
+  $('plPeakD').textContent = `~${fmt(pk.expected)} entering`;
+
+  // day bars, 5 am - 11 pm; tap one to look at that hour
+  const svc = d.day.filter(x => x.service), max = Math.max(...svc.map(x => x.expected), 1);
+  $('plBars').innerHTML = svc.map(x =>
+    `<button data-h="${x.hour}" aria-label="${ampm(x.hour)}: about ${fmt(x.expected)} people"
+      style="height:${Math.max(3, x.expected / max * 100)}%;background:${LEVEL_HEX[x.level]};opacity:${x.hour === hour ? 1 : .35}"></button>`).join('');
+  // one label cell per bar, text only every few hours, so labels sit under their bar
+  $('plBarsX').innerHTML = svc.map(x => `<span>${[6, 9, 12, 15, 18, 21].includes(x.hour) ? ampm(x.hour) : ''}</span>`).join('');
+}
+$('plBars').addEventListener('click', e => {
+  const b = e.target.closest('[data-h]'); if (!b || !plData) return;
+  $('plHour').value = b.dataset.h; renderPlan(+b.dataset.h);
+});
+
+/* --------------------------------- start --------------------------------- */
+setInterval(tickClock, 1000);
+tickClock();
+loadForecast(true);
 connect();
 
-/* Small handle for checking the forecast without waiting for a date to come
-   round — `MPApp.previewAt('2026-11-08T14:00')` shows Diwali afternoon. It
-   only moves this app's copy of the clock, so it drifts back the moment the
-   Twin publishes again; the Twin remains the one source of simulated time. */
-window.MPApp = {
-  forecast, renderForecast,
-  // lets a synthetic state be pushed through the real renderer, so the tie,
-  // terminus and in-transit wordings can be checked without driving the Twin
-  // into each of those shapes by hand
-  render,
-  get state() { return lastState; },
-  get dates() { return significantDates; },
-  previewAt(iso) {
-    const t = Date.parse(iso.length <= 16 ? iso + ':00+05:30' : iso + '+05:30');
-    if (isNaN(t)) return 'bad date — use YYYY-MM-DDTHH:MM';
-    simOffsetMs = t - Date.now();
-    tickClock();
-    return forecast();
-  }
-};
+window.MPApp = { render, get state(){ return lastState; }, get forecast(){ return fc; }, show,
+  previewAt(iso){ const t = Date.parse(iso.length <= 16 ? iso + ':00+05:30' : iso + '+05:30'); if (isNaN(t)) return 'use YYYY-MM-DDTHH:MM'; simOffsetMs = t - Date.now(); tickClock(); return simHourIso(); } };
 </script>
+</body>
+</html>

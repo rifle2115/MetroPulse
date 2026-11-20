@@ -1,0 +1,28 @@
+{
+  "trained_at": "2026-11-20T20:36:02",
+  "history": {
+    "from": "2025-08-01",
+    "to": "2025-09-30",
+    "days": 48,
+    "stations": 83,
+    "rows": 92280
+  },
+  "test_window": {
+    "from": "2025-09-17",
+    "days": 14
+  },
+  "model": {
+    "mae": 38.677715821221284,
+    "wape": 0.10459497480233851,
+    "range_coverage": 0.735356174017884
+  },
+  "baseline_average": {
+    "mae": 47.192156722126605,
+    "wape": 0.12803645573125433
+  },
+  "event_days": {
+    "model_wape": 0.12611746465166745,
+    "baseline_wape": 0.13259958030099162
+  },
+  "improvement_vs_baseline": 0.18308442540864278
+}
