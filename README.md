@@ -124,7 +124,7 @@ That prints the address your Wi-Fi router gave the laptop, for example
 macOS: `ipconfig getifaddr en0` · Linux: `hostname -I`
 
 **2. On the phone, open `http://<that-IP>:8090`** — e.g.
-<http://192.168.0.191:8090>. The passenger app prints exactly this URL when it
+<http://10.233.110.204:8090>. The passenger app prints exactly this URL when it
 starts (`on your phone:`), so you can read it off the terminal instead.
 
 **MQTT follows automatically.** The page connects to the broker at the *same
