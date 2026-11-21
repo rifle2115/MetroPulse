@@ -361,9 +361,9 @@ import mqtt from './vendor/mqtt.esm.js';
 
 /* The broker runs on the PC that served this page, so a phone on the same
    Wi-Fi reaches it at the host name it used to open the app — opening
-   http://10.233.110.204:8090 connects to ws://10.233.110.204:9001. If that host
+   http://10.233.110.247:8090 connects to ws://10.233.110.247:9001. If that host
    is the wrong one (VPN, a second adapter, a reverse proxy), force the broker
-   once with ?mqtt=ws://10.233.110.204:9001 in the URL. */
+   once with ?mqtt=ws://10.233.110.247:9001 in the URL. */
 const MQTT_PARAM = new URLSearchParams(location.search).get('mqtt');
 const MQTT_WS_URL = MQTT_PARAM || `ws://${location.hostname || 'localhost'}:9001`;
 const $ = id => document.getElementById(id);

@@ -119,16 +119,16 @@ must be on the **same Wi-Fi network**.
 ```
 
 That prints the address your Wi-Fi router gave the laptop, for example
-`10.233.110.204`. Use that IP in the next step.
+`10.233.110.247`. Use that IP in the next step.
 
 macOS: `ipconfig getifaddr en0` · Linux: `hostname -I`
 
 **2. On the phone, open `http://<that-IP>:8090`** — e.g.
-<http://10.233.110.204:8090>. The passenger app prints exactly this URL when it
+<http://10.233.110.247:8090>. The passenger app prints exactly this URL when it
 starts (`on your phone:`), so you can read it off the terminal instead.
 
 **MQTT follows automatically.** The page connects to the broker at the *same
-host you opened it with* — `ws://10.233.110.204:9001` in the example — so coach
+host you opened it with* — `ws://10.233.110.247:9001` in the example — so coach
 loads and live state reach the phone with no extra config. Both mosquitto
 listeners bind to all interfaces and Docker publishes ports `1883` (Python
 processes) and `9001` (browsers). The Control Room (`:8000`) and Twin (`:8080`)
@@ -143,7 +143,7 @@ If the app header says **Offline**:
   traffic even on the same SSID;
 - if the laptop has several adapters (VPN, Ethernet) and the page picked the
   wrong host, force the broker in the URL:
-  <http://10.233.110.204:8090/?mqtt=ws://10.233.110.204:9001>
+  <http://10.233.110.247:8090/?mqtt=ws://10.233.110.247:9001>
 
 After editing `pipeline/mqtt/mosquitto.conf`, re-apply it with
 `docker compose -f pipeline/mqtt/docker-compose.yml up -d`.
