@@ -145,6 +145,22 @@ If the app header says **Offline**:
   wrong host, force the broker in the URL:
   <http://10.233.110.247:8090/?mqtt=ws://10.233.110.247:9001>
 
+If the page itself won't load on the phone at all:
+
+- confirm the server is actually running on the demo PC — open
+  `http://127.0.0.1:8090` there; if that fails, start `user_app/serve.py`;
+- allow port `8090` through the host firewall. On Windows, an **administrator**
+  PowerShell:
+  ```powershell
+  New-NetFirewallRule -DisplayName "MetroPulse 8090" -Direction Inbound `
+    -Protocol TCP -LocalPort 8090 -Action Allow -Profile Any
+  ```
+  Docker's `1883`/`9001` mappings get firewall rules automatically, so a phone
+  can reach MQTT while `8090` is still blocked — that combination points at the
+  firewall, not the app;
+- turn mobile data and any VPN off for the test; the phone must be on the same
+  hotspot as the demo PC.
+
 After editing `pipeline/mqtt/mosquitto.conf`, re-apply it with
 `docker compose -f pipeline/mqtt/docker-compose.yml up -d`.
 
